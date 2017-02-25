@@ -10,6 +10,22 @@ import (
 type DataHandlerFunc func(w io.Writer, r io.Reader)
 type CmdHandlerFunc func(w io.Writer, r io.Reader)
 
+var defaultDataHandlerFunc = func(w io.Writer, r io.Reader) {
+	// Keep reading and do nothing
+	for {
+		b := make([]byte, 512)
+		if _, err := r.Read(b); err != nil {
+			break // an EOF means the end of connection
+		}
+	}
+}
+
+var defaultCmdHandlerFunc = func(w io.Writer, r io.Reader) {
+	// Keep reading and do nothing
+	b := make([]byte, 512)
+	r.Read(b)
+}
+
 type TelnetOpts struct {
 	Addr        string
 	ServerOpts  []byte
@@ -19,12 +35,11 @@ type TelnetOpts struct {
 }
 
 type TelnetServer struct {
-	ServerOptions  map[byte]bool
-	ClientOptions  map[byte]bool
-	optionCallback func(conn net.Conn, cmd byte, opt byte)
-	DataHandler    func(w io.Writer, r io.Reader)
-	CmdHandler     func(w io.Writer, r io.Reader)
-	ln             net.Listener
+	ServerOptions map[byte]bool
+	ClientOptions map[byte]bool
+	DataHandler   func(w io.Writer, r io.Reader)
+	CmdHandler    func(w io.Writer, r io.Reader)
+	ln            net.Listener
 }
 
 func NewTelnetServer(opts TelnetOpts) *TelnetServer {
@@ -38,7 +53,14 @@ func NewTelnetServer(opts TelnetOpts) *TelnetServer {
 		ts.ClientOptions[v] = true
 	}
 	ts.DataHandler = opts.DataHandler
+	if ts.DataHandler == nil {
+		ts.DataHandler = defaultDataHandlerFunc
+	}
+
 	ts.CmdHandler = opts.CmdHandler
+	if ts.CmdHandler == nil {
+		ts.CmdHandler = defaultCmdHandlerFunc
+	}
 	ln, err := net.Listen("tcp", opts.Addr)
 	if err != nil {
 		panic(fmt.Sprintf("cannot start telnet server: %v", err))
@@ -51,6 +73,18 @@ func (ts *TelnetServer) Serve() {
 	for {
 		conn, _ := ts.ln.Accept()
 		log.Printf("connection received")
-		go newTelnetConn(conn, ts)
+		opts := connOpts{
+			conn:       conn,
+			cmdHandler: ts.CmdHandler,
+			serverOpts: ts.ServerOptions,
+			clientOpts: ts.ClientOptions,
+			fsm:        newTelnetFSM(),
+		}
+		tc := newTelnetConn(opts)
+		go tc.connectionLoop()
+		go tc.readLoop()
+		go ts.DataHandler(tc.handlerWriter, tc.dataRW)
+		tc.fsm.start()
+		tc.startNegotiation()
 	}
 }

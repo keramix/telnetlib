@@ -8,6 +8,15 @@ import (
 	"sync"
 )
 
+type connOpts struct {
+	conn        net.Conn
+	fsm         *telnetFSM
+	cmdHandler  CmdHandlerFunc
+	serverOpts  map[byte]bool
+	clientOpts  map[byte]bool
+	optCallback func(byte, byte)
+}
+
 type telnetConn struct {
 	conn              net.Conn
 	readCh            chan []byte
@@ -15,13 +24,17 @@ type telnetConn struct {
 	acceptedOpts      map[byte]bool
 	unackedServerOpts map[byte]bool
 	unackedClientOpts map[byte]bool
-	server            *TelnetServer
-	dataRW            io.ReadWriter
-	cmdBufMutex       *sync.Mutex
-	cmdBuffer         bytes.Buffer
-	fsm               *telnetFSM
-	fsmInputCh        chan byte
-	handlerWriter     io.Writer
+	//server            *TelnetServer
+	serverOpts     map[byte]bool
+	clientOpts     map[byte]bool
+	dataRW         io.ReadWriter
+	cmdBufMutex    *sync.Mutex
+	cmdBuffer      bytes.Buffer
+	fsm            *telnetFSM
+	fsmInputCh     chan byte
+	handlerWriter  io.Writer
+	cmdHandler     CmdHandlerFunc
+	optionCallback func(byte, byte)
 }
 
 // Safely read/write concurrently to the data Buffer
@@ -52,16 +65,23 @@ func (cw *connectionWriter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func newTelnetConn(conn net.Conn, telnetServer *TelnetServer) *telnetConn {
+func newTelnetConn(opts connOpts) *telnetConn {
 	tc := &telnetConn{
-		conn:              conn,
+		conn:              opts.conn,
 		readCh:            make(chan []byte),
 		writeCh:           make(chan []byte),
 		acceptedOpts:      make(map[byte]bool),
 		unackedServerOpts: make(map[byte]bool),
 		unackedClientOpts: make(map[byte]bool),
-		server:            telnetServer,
-		fsmInputCh:        make(chan byte),
+		//server:            telnetServer,
+		cmdHandler:     opts.cmdHandler,
+		serverOpts:     opts.serverOpts,
+		clientOpts:     opts.clientOpts,
+		optionCallback: opts.optCallback,
+		fsmInputCh:     make(chan byte),
+	}
+	if tc.optionCallback == nil {
+		tc.optionCallback = tc.handleOptionCommand
 	}
 	tc.handlerWriter = &connectionWriter{
 		ch: tc.writeCh,
@@ -70,11 +90,9 @@ func newTelnetConn(conn net.Conn, telnetServer *TelnetServer) *telnetConn {
 		dataBuffer: bytes.NewBuffer(make([]byte, 512)),
 		dataMux:    new(sync.Mutex),
 	}
-	tc.fsm = newTelnetFSM(tc)
-	go tc.connectionLoop()
-	go tc.readLoop()
-	go tc.server.DataHandler(tc.handlerWriter, tc.dataRW)
-	tc.startNegotiation()
+	fsm := opts.fsm
+	fsm.tc = tc
+	tc.fsm = fsm
 	return tc
 }
 
@@ -109,12 +127,12 @@ func (c *telnetConn) readLoop() {
 }
 
 func (c *telnetConn) startNegotiation() {
-	for k := range c.server.ServerOptions {
+	for k := range c.serverOpts {
 		log.Printf("sending WILL %d", k)
 		c.unackedServerOpts[k] = true
 		c.sendCmd(WILL, k)
 	}
-	for k := range c.server.ClientOptions {
+	for k := range c.clientOpts {
 		log.Printf("sending DO %d", k)
 		c.unackedClientOpts[k] = true
 		c.sendCmd(DO, k)
@@ -127,9 +145,8 @@ func (c *telnetConn) sendCmd(cmd byte, opt byte) {
 }
 
 func (c *telnetConn) handleOptionCommand(cmd byte, opt byte) {
-	ts := c.server
 	if cmd == WILL || cmd == WONT {
-		if _, ok := ts.ClientOptions[opt]; !ok {
+		if _, ok := c.clientOpts[opt]; !ok {
 			c.sendCmd(DONT, opt)
 			return
 		}
@@ -146,7 +163,7 @@ func (c *telnetConn) handleOptionCommand(cmd byte, opt byte) {
 	}
 
 	if cmd == DO || cmd == DONT {
-		if _, ok := ts.ServerOptions[opt]; !ok {
+		if _, ok := c.serverOpts[opt]; !ok {
 			c.sendCmd(WONT, opt)
 			return
 		}

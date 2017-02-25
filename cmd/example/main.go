@@ -34,9 +34,9 @@ func main() {
 	}
 
 	opts := telnetlib.TelnetOpts{
-		Addr: ":6779",
-		//ServerOpts:  []byte{0, 3, 1},
-		//ClientOpts:  []byte{0, 3, 1},
+		Addr:        ":6779",
+		ServerOpts:  []byte{0, 3, 1},
+		ClientOpts:  []byte{0, 3, 1},
 		DataHandler: dhandler,
 	}
 

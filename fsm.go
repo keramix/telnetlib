@@ -18,27 +18,28 @@ type telnetFSM struct {
 	tc       *telnetConn
 }
 
-func newTelnetFSM(tc *telnetConn) *telnetFSM {
+func newTelnetFSM() *telnetFSM {
 	f := &telnetFSM{
 		curState: dataState,
-		tc:       tc,
 	}
-	go f.start()
 	return f
 }
 
 func (fsm *telnetFSM) start() {
-	for {
-		select {
-		case ch := <-fsm.tc.fsmInputCh:
-			//log.Printf("FSM state is %d", fsm.curState)
-			fsm.nextState(ch)
+	go func() {
+		for {
+			select {
+			case ch := <-fsm.tc.fsmInputCh:
+				//log.Printf("FSM state is %d", fsm.curState)
+				ns := fsm.nextState(ch)
+				fsm.curState = ns
+			}
 		}
-	}
+	}()
 }
 
 // this function returns what the next state is and performs the appropriate action
-func (fsm *telnetFSM) nextState(ch byte) {
+func (fsm *telnetFSM) nextState(ch byte) state {
 	var nextState state
 	b := []byte{ch}
 	switch fsm.curState {
@@ -61,18 +62,18 @@ func (fsm *telnetFSM) nextState(ch byte) {
 			nextState = optionNegotiationState
 		} else if ch == SB {
 			fsm.tc.cmdBuffer.WriteByte(ch)
-			fsm.tc.server.CmdHandler(fsm.tc.handlerWriter, &fsm.tc.cmdBuffer)
-			fsm.tc.cmdBuffer.Reset()
 			nextState = subnegState
 		} else { // anything else
 			fsm.tc.cmdBuffer.WriteByte(ch)
+			fsm.tc.cmdHandler(fsm.tc.handlerWriter, &fsm.tc.cmdBuffer)
+			fsm.tc.cmdBuffer.Reset()
 			nextState = dataState
 		}
 	case optionNegotiationState:
 		fsm.tc.cmdBuffer.WriteByte(ch)
 		opt := ch
 		cmd := fsm.tc.cmdBuffer.Bytes()[0]
-		fsm.tc.handleOptionCommand(cmd, opt)
+		fsm.tc.optionCallback(cmd, opt)
 		fsm.tc.cmdBuffer.Reset()
 		nextState = dataState
 	case subnegState:
@@ -85,7 +86,7 @@ func (fsm *telnetFSM) nextState(ch byte) {
 	case subnegEndState:
 		if ch == SE {
 			fsm.tc.cmdBuffer.WriteByte(ch)
-			fsm.tc.server.CmdHandler(fsm.tc.handlerWriter, &fsm.tc.cmdBuffer)
+			fsm.tc.cmdHandler(fsm.tc.handlerWriter, &fsm.tc.cmdBuffer)
 			fsm.tc.cmdBuffer.Reset()
 			nextState = dataState
 		} else {
@@ -95,5 +96,5 @@ func (fsm *telnetFSM) nextState(ch byte) {
 		nextState = dataState
 		log.Printf("Finite state machine is in an error state. This should not happen for correct telnel protocol syntax")
 	}
-	fsm.curState = nextState
+	return nextState
 }

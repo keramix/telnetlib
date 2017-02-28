@@ -141,7 +141,9 @@ func (c *telnetConn) startNegotiation() {
 
 func (c *telnetConn) sendCmd(cmd byte, opt byte) {
 	b := []byte{IAC, cmd, opt}
+	log.Printf("Sending command: %v %v", cmd, opt)
 	c.writeCh <- b
+	log.Printf("command sent!")
 }
 
 func (c *telnetConn) handleOptionCommand(cmd byte, opt byte) {

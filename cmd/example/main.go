@@ -10,6 +10,8 @@ import (
 var dhandler telnetlib.DataHandlerFunc
 var chandler telnetlib.CmdHandlerFunc
 
+const VMWARE_EXT byte = 232
+
 func main() {
 	// This is an echoHandler
 	dhandler = func(w io.Writer, r io.Reader) {
@@ -21,7 +23,7 @@ func main() {
 				//log.Printf("error: %v", err)
 			}
 			if n1 != 0 {
-				_, err := w.Write(buf)
+				//_, err := w.Write(buf)
 				if err != nil {
 					log.Printf("write error: %v", err)
 				}
@@ -30,13 +32,19 @@ func main() {
 	}
 
 	chandler = func(w io.Writer, r io.Reader) {
-
+		b := make([]byte, 512)
+		log.Printf("command recieved")
+		_, err := r.Read(b)
+		if err != nil && err != io.EOF {
+			panic(err)
+		}
+		log.Printf("command: %v", b)
 	}
 
 	opts := telnetlib.TelnetOpts{
 		Addr:        ":6779",
-		ServerOpts:  []byte{0, 3, 1},
-		ClientOpts:  []byte{0, 3, 1},
+		ServerOpts:  []byte{telnetlib.BINARY, telnetlib.SGA, telnetlib.ECHO},
+		ClientOpts:  []byte{telnetlib.BINARY, telnetlib.SGA, VMWARE_EXT},
 		DataHandler: dhandler,
 	}
 

@@ -103,9 +103,9 @@ func (c *telnetConn) connectionLoop() {
 		for {
 			readBytes := <-c.readCh
 			for _, ch := range readBytes {
-				log.Printf("putting character on the fsm")
+				//log.Printf("putting character on the fsm")
 				c.fsmInputCh <- ch
-				log.Printf("character already put on the fsm")
+				//log.Printf("character already put on the fsm")
 			}
 		}
 	}()
@@ -113,9 +113,9 @@ func (c *telnetConn) connectionLoop() {
 	go func() {
 		for {
 			writeBytes := <-c.writeCh
-			log.Printf("writing to the connection")
+			//log.Printf("writing to the connection")
 			c.conn.Write(writeBytes)
-			log.Printf("connections already wrote")
+			//log.Printf("connections already wrote")
 		}
 	}()
 }

@@ -113,9 +113,9 @@ func (c *telnetConn) connectionLoop() {
 	go func() {
 		for {
 			writeBytes := <-c.writeCh
-			log.Printf("writing to the connection")
+			//log.Printf("writing to the connection")
 			c.conn.Write(writeBytes)
-			log.Printf("connections already wrote")
+			//log.Printf("connections already wrote")
 		}
 	}()
 }
@@ -130,7 +130,6 @@ func (c *telnetConn) readLoop() {
 		}
 		log.Printf("read %d bytes from the TCP Connection %v", n, buf[:n])
 		c.readCh <- buf[:n]
-		log.Printf("wrote to read channel")
 	}
 }
 
@@ -151,7 +150,7 @@ func (c *telnetConn) sendCmd(cmd byte, opt byte) {
 	b := []byte{IAC, cmd, opt}
 	log.Printf("Sending command: %v %v", cmd, opt)
 	c.writeCh <- b
-	log.Printf("command sent!")
+	//log.Printf("command sent!")
 }
 
 func (c *telnetConn) handleOptionCommand(cmd byte, opt byte) {

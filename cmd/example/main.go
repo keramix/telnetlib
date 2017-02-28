@@ -68,7 +68,7 @@ func isVmotionPeer(cmd []byte) bool {
 func handleKnownSuboptions(w io.Writer, b []byte) {
 	log.Printf("Handling KNOWN SUBOPTIONS")
 	var resp []byte
-	suboptions := b[3 : len(b)-2]
+	suboptions := b[3 : len(b)-1]
 	resp = append(resp, []byte{telnetlib.IAC, telnetlib.SB, VMWARE_EXT, KNOWN_SUBOPTIONS_2}...)
 	resp = append(resp, suboptions...)
 	resp = append(resp, telnetlib.IAC, telnetlib.SE)
@@ -86,7 +86,7 @@ func handleDoProxy(w io.Writer, b []byte) {
 
 func handleVmotionBegin(w io.Writer, b []byte) {
 	log.Printf("Handling VMOTION BEGIN")
-	seq := b[4 : len(b)-2]
+	seq := b[4 : len(b)-1]
 	secret := make([]byte, 4)
 	rand.Read(secret)
 	var resp []byte
@@ -101,7 +101,7 @@ func handleVmotionBegin(w io.Writer, b []byte) {
 func handleVmotionPeer(w io.Writer, b []byte) {
 	// this should send back the sequence only but I will try to send the sequence and the secret
 	log.Printf("Handling VMOTION PEER")
-	cookie := b[4 : len(b)-2]
+	cookie := b[4 : len(b)-1]
 	var resp []byte
 	resp = append(resp, []byte{telnetlib.IAC, telnetlib.SB, VMWARE_EXT, VMOTION_PEER_OK}...)
 	resp = append(resp, cookie...)

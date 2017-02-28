@@ -103,9 +103,9 @@ func (c *telnetConn) connectionLoop() {
 		for {
 			readBytes := <-c.readCh
 			for _, ch := range readBytes {
-				log.Printf("putting character on the fsm")
+				log.Printf("putting character %v on the fsm", ch)
 				c.fsmInputCh <- ch
-				log.Printf("character already put on the fsm")
+				//log.Printf("character already put on the fsm")
 			}
 		}
 	}()

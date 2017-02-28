@@ -98,21 +98,26 @@ func newTelnetConn(opts connOpts) *telnetConn {
 
 func (c *telnetConn) connectionLoop() {
 	log.Printf("Entered connectionLoop")
-	for {
-		select {
-		case readBytes := <-c.readCh:
-			// write the read bytes byte by byte to the fsm input channel
+	// this is the reading thread
+	go func() {
+		for {
+			readBytes := <-c.readCh
 			for _, ch := range readBytes {
 				log.Printf("putting character on the fsm")
 				c.fsmInputCh <- ch
 				log.Printf("character already put on the fsm")
 			}
-		case writeBytes := <-c.writeCh:
+		}
+	}()
+	// this is the writing thread
+	go func() {
+		for {
+			writeBytes := <-c.writeCh
 			log.Printf("writing to the connection")
 			c.conn.Write(writeBytes)
 			log.Printf("connections already wrote")
 		}
-	}
+	}()
 }
 
 // reads from the connection and dumps into the connection read channel

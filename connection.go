@@ -103,11 +103,14 @@ func (c *telnetConn) connectionLoop() {
 		case readBytes := <-c.readCh:
 			// write the read bytes byte by byte to the fsm input channel
 			for _, ch := range readBytes {
+				log.Printf("putting character on the fsm")
 				c.fsmInputCh <- ch
+				log.Printf("character already put on the fsm")
 			}
 		case writeBytes := <-c.writeCh:
-			//log.Printf("writing: %v", writeBytes)
+			log.Printf("writing to the connection")
 			c.conn.Write(writeBytes)
+			log.Printf("connections already wrote")
 		}
 	}
 }

@@ -30,7 +30,7 @@ func (fsm *telnetFSM) start() {
 		for {
 			select {
 			case ch := <-fsm.tc.fsmInputCh:
-				//log.Printf("FSM state is %d", fsm.curState)
+				log.Printf("FSM state is %d", fsm.curState)
 				ns := fsm.nextState(ch)
 				fsm.curState = ns
 			}

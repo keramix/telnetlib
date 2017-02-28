@@ -86,6 +86,7 @@ func (fsm *telnetFSM) nextState(ch byte) state {
 	case subnegEndState:
 		if ch == SE {
 			fsm.tc.cmdBuffer.WriteByte(ch)
+			log.Printf("starting the command handler")
 			fsm.tc.cmdHandler(fsm.tc.handlerWriter, &fsm.tc.cmdBuffer)
 			fsm.tc.cmdBuffer.Reset()
 			nextState = dataState

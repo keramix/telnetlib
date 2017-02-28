@@ -72,6 +72,7 @@ func handleKnownSuboptions(w io.Writer, b []byte) {
 	resp = append(resp, []byte{telnetlib.IAC, telnetlib.SB, VMWARE_EXT, KNOWN_SUBOPTIONS_2}...)
 	resp = append(resp, suboptions...)
 	resp = append(resp, telnetlib.IAC, telnetlib.SE)
+	log.Printf("response: %v", resp)
 	w.Write(resp)
 }
 
@@ -79,6 +80,7 @@ func handleDoProxy(w io.Writer, b []byte) {
 	log.Printf("Handling DO PROXY")
 	var resp []byte
 	resp = append(resp, []byte{telnetlib.IAC, telnetlib.SB, VMWARE_EXT, WILL_PROXY, telnetlib.IAC, telnetlib.SE}...)
+	log.Printf("response: %v", resp)
 	w.Write(resp)
 }
 
@@ -92,6 +94,7 @@ func handleVmotionBegin(w io.Writer, b []byte) {
 	resp = append(resp, seq...)
 	resp = append(resp, secret...)
 	resp = append(resp, telnetlib.IAC, telnetlib.SE)
+	log.Printf("response: %v", resp)
 	w.Write(resp)
 }
 
@@ -103,6 +106,7 @@ func handleVmotionPeer(w io.Writer, b []byte) {
 	resp = append(resp, []byte{telnetlib.IAC, telnetlib.SB, VMWARE_EXT, VMOTION_PEER_OK}...)
 	resp = append(resp, cookie...)
 	resp = append(resp, telnetlib.IAC, telnetlib.SE)
+	log.Printf("response: %v", resp)
 	w.Write(resp)
 }
 

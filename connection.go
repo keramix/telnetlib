@@ -128,7 +128,9 @@ func (c *telnetConn) readLoop() {
 		if err != nil {
 			//log.Printf("read error: %v", err)
 		}
-		//log.Printf("read %d bytes from the TCP Connection %v", n, buf[:n])
+		if n > 0 {
+			log.Printf("read %d bytes from the TCP Connection %v", n, buf[:n])
+		}
 		c.readCh <- buf[:n]
 	}
 }

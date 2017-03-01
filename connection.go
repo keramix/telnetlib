@@ -171,12 +171,14 @@ func (c *TelnetConn) startNegotiation() {
 	}
 }
 
+// Close closes the telnet connection
 func (c *TelnetConn) Close() {
+	log.Printf("Closing the connection")
 	c.conn.Close()
 	readLoopCh := make(chan struct{})
 	connLoopReadCh := make(chan struct{})
 	connLoopWriteCh := make(chan struct{})
-	log.Printf("trying to close read loop")
+	fsmCh := make(chan struct{})
 	c.readDoneCh <- readLoopCh
 	<-readLoopCh
 	log.Printf("read loop closed")
@@ -186,6 +188,9 @@ func (c *TelnetConn) Close() {
 	c.connWriteDoneCh <- connLoopWriteCh
 	<-connLoopWriteCh
 	log.Printf("write loop closed")
+	c.fsm.doneCh <- fsmCh
+	<-fsmCh
+	log.Printf("fsm closed")
 	log.Printf("telnet connection closed")
 }
 

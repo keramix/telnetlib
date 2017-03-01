@@ -93,7 +93,7 @@ func handleVMName(w io.Writer, b []byte) {
 }
 
 func handleVMUUID(w io.Writer, b []byte) {
-	log.Printf("Got VM UUID: %v", b[3:len(b)-1])
+	log.Printf("Got VM UUID: %v", string(b[3:len(b)-1]))
 }
 
 func handleKnownSuboptions(w io.Writer, b []byte) {
@@ -185,7 +185,7 @@ func main() {
 		} else if isVMName(b) {
 			handleVMName(w, b)
 		} else if isVMUUID(b) {
-			handleVMName(w, b)
+			handleVMUUID(w, b)
 		}
 	}
 

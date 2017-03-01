@@ -172,6 +172,7 @@ func (c *TelnetConn) Close() {
 	readLoopCh := make(chan struct{})
 	connLoopReadCh := make(chan struct{})
 	connLoopWriteCh := make(chan struct{})
+	log.Printf("trying to close read loop")
 	c.readDoneCh <- readLoopCh
 	<-readLoopCh
 	log.Printf("read loop closed")

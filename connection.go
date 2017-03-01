@@ -17,7 +17,7 @@ type connOpts struct {
 	optCallback func(byte, byte)
 }
 
-type telnetConn struct {
+type TelnetConn struct {
 	conn              net.Conn
 	readCh            chan []byte
 	writeCh           chan []byte
@@ -25,16 +25,19 @@ type telnetConn struct {
 	unackedServerOpts map[byte]bool
 	unackedClientOpts map[byte]bool
 	//server            *TelnetServer
-	serverOpts     map[byte]bool
-	clientOpts     map[byte]bool
-	dataRW         io.ReadWriter
-	cmdBufMutex    *sync.Mutex
-	cmdBuffer      bytes.Buffer
-	fsm            *telnetFSM
-	fsmInputCh     chan byte
-	handlerWriter  io.Writer
-	cmdHandler     CmdHandlerFunc
-	optionCallback func(byte, byte)
+	serverOpts      map[byte]bool
+	clientOpts      map[byte]bool
+	dataRW          io.ReadWriter
+	cmdBufMutex     *sync.Mutex
+	cmdBuffer       bytes.Buffer
+	fsm             *telnetFSM
+	fsmInputCh      chan byte
+	handlerWriter   io.Writer
+	cmdHandler      CmdHandlerFunc
+	optionCallback  func(byte, byte)
+	readDoneCh      chan chan struct{}
+	connReadDoneCh  chan chan struct{}
+	connWriteDoneCh chan chan struct{}
 }
 
 // Safely read/write concurrently to the data Buffer
@@ -65,8 +68,8 @@ func (cw *connectionWriter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func newTelnetConn(opts connOpts) *telnetConn {
-	tc := &telnetConn{
+func newTelnetConn(opts connOpts) *TelnetConn {
+	tc := &TelnetConn{
 		conn:              opts.conn,
 		readCh:            make(chan []byte),
 		writeCh:           make(chan []byte),
@@ -96,46 +99,63 @@ func newTelnetConn(opts connOpts) *telnetConn {
 	return tc
 }
 
-func (c *telnetConn) connectionLoop() {
+func (c *TelnetConn) connectionLoop() {
 	log.Printf("Entered connectionLoop")
 	// this is the reading thread
 	go func() {
 		for {
-			readBytes := <-c.readCh
-			for _, ch := range readBytes {
-				//log.Printf("putting character %v on the fsm", ch)
-				c.fsmInputCh <- ch
-				//log.Printf("character already put on the fsm")
+			select {
+			case readBytes := <-c.readCh:
+				for _, ch := range readBytes {
+					//log.Printf("putting character %v on the fsm", ch)
+					c.fsmInputCh <- ch
+					//log.Printf("character already put on the fsm")
+				}
+
+			case ch := <-c.connReadDoneCh:
+				ch <- struct{}{}
+				return
 			}
 		}
 	}()
 	// this is the writing thread
 	go func() {
 		for {
-			writeBytes := <-c.writeCh
-			//log.Printf("writing to the connection")
-			c.conn.Write(writeBytes)
+			select {
+			case writeBytes := <-c.writeCh:
+				//log.Printf("writing to the connection")
+				c.conn.Write(writeBytes)
 			//log.Printf("connections already wrote")
+			case ch := <-c.connWriteDoneCh:
+				ch <- struct{}{}
+				return
+			}
 		}
 	}()
 }
 
 // reads from the connection and dumps into the connection read channel
-func (c *telnetConn) readLoop() {
+func (c *TelnetConn) readLoop() {
 	for {
-		buf := make([]byte, 256)
-		n, err := c.conn.Read(buf)
-		if err != nil {
-			//log.Printf("read error: %v", err)
+		select {
+		case ch := <-c.readDoneCh:
+			ch <- struct{}{}
+			return
+		default:
+			buf := make([]byte, 256)
+			n, err := c.conn.Read(buf)
+			if err != nil {
+				//log.Printf("read error: %v", err)
+			}
+			if n > 0 {
+				log.Printf("read %d bytes from the TCP Connection %v", n, buf[:n])
+			}
+			c.readCh <- buf[:n]
 		}
-		if n > 0 {
-			log.Printf("read %d bytes from the TCP Connection %v", n, buf[:n])
-		}
-		c.readCh <- buf[:n]
 	}
 }
 
-func (c *telnetConn) startNegotiation() {
+func (c *TelnetConn) startNegotiation() {
 	for k := range c.serverOpts {
 		log.Printf("sending WILL %d", k)
 		c.unackedServerOpts[k] = true
@@ -148,14 +168,31 @@ func (c *telnetConn) startNegotiation() {
 	}
 }
 
-func (c *telnetConn) sendCmd(cmd byte, opt byte) {
+func (c *TelnetConn) Close() {
+	readLoopCh := make(chan struct{})
+	connLoopReadCh := make(chan struct{})
+	connLoopWriteCh := make(chan struct{})
+	c.readDoneCh <- readLoopCh
+	<-readLoopCh
+	log.Printf("read loop closed")
+	c.connReadDoneCh <- connLoopReadCh
+	<-connLoopReadCh
+	log.Printf("fsm loop closed")
+	c.connWriteDoneCh <- connLoopWriteCh
+	<-connLoopWriteCh
+	log.Printf("write loop closed")
+	c.conn.Close()
+	log.Printf("telnet connection closed")
+}
+
+func (c *TelnetConn) sendCmd(cmd byte, opt byte) {
 	b := []byte{IAC, cmd, opt}
 	log.Printf("Sending command: %v %v", cmd, opt)
 	c.writeCh <- b
 	//log.Printf("command sent!")
 }
 
-func (c *telnetConn) handleOptionCommand(cmd byte, opt byte) {
+func (c *TelnetConn) handleOptionCommand(cmd byte, opt byte) {
 	if cmd == WILL || cmd == WONT {
 		if _, ok := c.clientOpts[opt]; !ok {
 			c.sendCmd(DONT, opt)

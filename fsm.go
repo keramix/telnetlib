@@ -15,7 +15,7 @@ const (
 
 type telnetFSM struct {
 	curState state
-	tc       *telnetConn
+	tc       *TelnetConn
 }
 
 func newTelnetFSM() *telnetFSM {
@@ -26,16 +26,14 @@ func newTelnetFSM() *telnetFSM {
 }
 
 func (fsm *telnetFSM) start() {
-	go func() {
-		for {
-			select {
-			case ch := <-fsm.tc.fsmInputCh:
-				//log.Printf("FSM state is %d", fsm.curState)
-				ns := fsm.nextState(ch)
-				fsm.curState = ns
-			}
+	for {
+		select {
+		case ch := <-fsm.tc.fsmInputCh:
+			//log.Printf("FSM state is %d", fsm.curState)
+			ns := fsm.nextState(ch)
+			fsm.curState = ns
 		}
-	}()
+	}
 }
 
 // this function returns what the next state is and performs the appropriate action

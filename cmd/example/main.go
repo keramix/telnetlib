@@ -6,8 +6,6 @@ import (
 	"io"
 	"log"
 
-	"time"
-
 	"github.com/kreamyx/telnetlib"
 )
 
@@ -228,11 +226,11 @@ func main() {
 	}
 	srvr := telnetlib.NewTelnetServer(opts)
 	for {
-		conn, err := srvr.Accept()
+		_, err := srvr.Accept()
 		if err != nil {
 			panic(err)
 		}
-		time.Sleep(10 * time.Second)
-		conn.Close()
+		//time.Sleep(10 * time.Second)
+		//conn.Close()
 	}
 }

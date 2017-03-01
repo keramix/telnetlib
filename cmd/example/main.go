@@ -68,6 +68,20 @@ func isVmotionPeer(cmd []byte) bool {
 	return cmd[0] == telnetlib.SB && cmd[1] == VMWARE_EXT && cmd[2] == VMOTION_PEER
 }
 
+func isVmotionComplete(cmd []byte) bool {
+	if len(cmd) < 3 {
+		return false
+	}
+	return cmd[0] == telnetlib.SB && cmd[1] == VMWARE_EXT && cmd[2] == VMOTION_COMPLETE
+}
+
+func isVmotionAbort(cmd []byte) bool {
+	if len(cmd) < 3 {
+		return false
+	}
+	return cmd[0] == telnetlib.SB && cmd[1] == VMWARE_EXT && cmd[2] == VMOTION_ABORT
+}
+
 func isVMName(cmd []byte) bool {
 	if len(cmd) < 3 {
 		return false
@@ -149,6 +163,14 @@ func handleVmotionPeer(w io.Writer, b []byte) {
 	w.Write(resp)
 }
 
+func handleVmotionComplete(w io.Writer, b []byte) {
+	log.Printf("vMotion is Complete")
+}
+
+func handleVmotionAbort(w io.Writer, b []byte) {
+	log.Printf("Aborting vMotion")
+}
+
 func main() {
 	// This is an echoHandler
 	dhandler = func(w io.Writer, r io.Reader) {
@@ -188,6 +210,10 @@ func main() {
 			handleVMName(w, b)
 		} else if isVMUUID(b) {
 			handleVMUUID(w, b)
+		} else if isVmotionComplete(b) {
+			handleVmotionComplete(w, b)
+		} else if isVmotionAbort(b) {
+			handleVmotionAbort(w, b)
 		}
 	}
 
@@ -209,5 +235,4 @@ func main() {
 		time.Sleep(10 * time.Second)
 		conn.Close()
 	}
-
 }

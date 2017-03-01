@@ -88,23 +88,3 @@ func (ts *TelnetServer) Accept() (*TelnetConn, error) {
 	go tc.startNegotiation()
 	return tc, nil
 }
-
-// func (ts *TelnetServer) Serve() {
-// 	for {
-// 		conn, _ := ts.ln.Accept()
-// 		log.Printf("connection received")
-// 		opts := connOpts{
-// 			conn:       conn,
-// 			cmdHandler: ts.CmdHandler,
-// 			serverOpts: ts.ServerOptions,
-// 			clientOpts: ts.ClientOptions,
-// 			fsm:        newTelnetFSM(),
-// 		}
-// 		tc := newTelnetConn(opts)
-// 		go tc.connectionLoop()
-// 		go tc.readLoop()
-// 		go ts.DataHandler(tc.handlerWriter, tc.dataRW)
-// 		tc.fsm.start()
-// 		tc.startNegotiation()
-// 	}
-// }

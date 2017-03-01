@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"io"
 	"log"
@@ -65,6 +66,36 @@ func isVmotionPeer(cmd []byte) bool {
 	return cmd[0] == telnetlib.SB && cmd[1] == VMWARE_EXT && cmd[2] == VMOTION_PEER
 }
 
+func isVMName(cmd []byte) bool {
+	if len(cmd) < 3 {
+		return false
+	}
+	return cmd[0] == telnetlib.SB && cmd[1] == VMWARE_EXT && cmd[2] == VM_NAME
+}
+
+func isVMUUID(cmd []byte) bool {
+	if len(cmd) < 3 {
+		return false
+	}
+	return cmd[0] == telnetlib.SB && cmd[1] == VMWARE_EXT && cmd[2] == VM_VC_UUID
+}
+
+func getVMName() []byte {
+	return []byte{telnetlib.IAC, telnetlib.SB, VMWARE_EXT, GET_VM_NAME, telnetlib.IAC, telnetlib.SE}
+}
+
+func getVMUUID() []byte {
+	return []byte{telnetlib.IAC, telnetlib.SB, VMWARE_EXT, GET_VM_VC_UUID, telnetlib.IAC, telnetlib.SE}
+}
+
+func handleVMName(w io.Writer, b []byte) {
+	log.Printf("Got VM Name: %v", string(b[3:len(b)-1]))
+}
+
+func handleVMUUID(w io.Writer, b []byte) {
+	log.Printf("Got VM UUID: %v", b[3:len(b)-1])
+}
+
 func handleKnownSuboptions(w io.Writer, b []byte) {
 	log.Printf("Handling KNOWN SUBOPTIONS")
 	var resp []byte
@@ -73,6 +104,12 @@ func handleKnownSuboptions(w io.Writer, b []byte) {
 	resp = append(resp, suboptions...)
 	resp = append(resp, telnetlib.IAC, telnetlib.SE)
 	log.Printf("response: %v", resp)
+	if bytes.IndexByte(suboptions, GET_VM_VC_UUID) != -1 && bytes.IndexByte(suboptions, VM_VC_UUID) != -1 {
+		resp = append(resp, getVMUUID()...)
+	}
+	if bytes.IndexByte(suboptions, VM_NAME) != -1 && bytes.IndexByte(suboptions, GET_VM_NAME) != -1 && bytes.IndexByte(suboptions, GET_VM_VC_UUID) != -1 && bytes.IndexByte(suboptions, VM_VC_UUID) != -1 {
+		resp = append(resp, getVMName()...)
+	}
 	w.Write(resp)
 }
 
@@ -145,6 +182,10 @@ func main() {
 			handleVmotionBegin(w, b)
 		} else if isVmotionPeer(b) {
 			handleVmotionPeer(w, b)
+		} else if isVMName(b) {
+			handleVMName(w, b)
+		} else if isVMUUID(b) {
+			handleVMName(w, b)
 		}
 	}
 

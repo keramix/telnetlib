@@ -191,12 +191,14 @@ func main() {
 		}
 	}
 
+	// FIXME: Handle the case when cmdHandler and DataHandler are nil
+	// Default handler should just read bytes and do nothing with them
 	opts := telnetlib.TelnetOpts{
-		Addr:       ":6779",
-		ServerOpts: []byte{telnetlib.BINARY, telnetlib.SGA, telnetlib.ECHO},
-		ClientOpts: []byte{telnetlib.BINARY, telnetlib.SGA, VMWARE_EXT},
-		//DataHandler: dhandler,
-		//CmdHandler:  chandler,
+		Addr:        ":6779",
+		ServerOpts:  []byte{telnetlib.BINARY, telnetlib.SGA, telnetlib.ECHO},
+		ClientOpts:  []byte{telnetlib.BINARY, telnetlib.SGA, VMWARE_EXT},
+		DataHandler: dhandler,
+		CmdHandler:  chandler,
 	}
 	srvr := telnetlib.NewTelnetServer(opts)
 	for {

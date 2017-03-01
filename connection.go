@@ -77,11 +77,14 @@ func newTelnetConn(opts connOpts) *TelnetConn {
 		unackedServerOpts: make(map[byte]bool),
 		unackedClientOpts: make(map[byte]bool),
 		//server:            telnetServer,
-		cmdHandler:     opts.cmdHandler,
-		serverOpts:     opts.serverOpts,
-		clientOpts:     opts.clientOpts,
-		optionCallback: opts.optCallback,
-		fsmInputCh:     make(chan byte),
+		cmdHandler:      opts.cmdHandler,
+		serverOpts:      opts.serverOpts,
+		clientOpts:      opts.clientOpts,
+		optionCallback:  opts.optCallback,
+		fsmInputCh:      make(chan byte),
+		readDoneCh:      make(chan chan struct{}),
+		connReadDoneCh:  make(chan chan struct{}),
+		connWriteDoneCh: make(chan chan struct{}),
 	}
 	if tc.optionCallback == nil {
 		tc.optionCallback = tc.handleOptionCommand

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"time"
 )
 
 type connOpts struct {
@@ -23,7 +24,6 @@ type TelnetConn struct {
 	conn              net.Conn
 	readCh            chan []byte
 	writeCh           chan []byte
-	acceptedOpts      map[byte]bool
 	unackedServerOpts map[byte]bool
 	unackedClientOpts map[byte]bool
 	//server            *TelnetServer
@@ -41,6 +41,7 @@ type TelnetConn struct {
 	optionCallback     func(byte, byte)
 	connReadDoneCh     chan chan struct{}
 	connWriteDoneCh    chan chan struct{}
+	negotiationDone    chan struct{}
 }
 
 // Safely read/write concurrently to the data Buffer
@@ -73,13 +74,11 @@ func (cw *connectionWriter) Write(b []byte) (int, error) {
 
 func newTelnetConn(opts connOpts) *TelnetConn {
 	tc := &TelnetConn{
-		conn:              opts.conn,
-		readCh:            make(chan []byte),
-		writeCh:           make(chan []byte),
-		acceptedOpts:      make(map[byte]bool),
-		unackedServerOpts: make(map[byte]bool),
-		unackedClientOpts: make(map[byte]bool),
-		//server:            telnetServer,
+		conn:               opts.conn,
+		readCh:             make(chan []byte),
+		writeCh:            make(chan []byte),
+		unackedServerOpts:  make(map[byte]bool),
+		unackedClientOpts:  make(map[byte]bool),
 		cmdHandler:         opts.cmdHandler,
 		dataHandler:        opts.dataHandler,
 		dataHandlerCloseCh: make(chan chan struct{}),
@@ -90,6 +89,7 @@ func newTelnetConn(opts connOpts) *TelnetConn {
 		fsmInputCh:         make(chan byte),
 		connReadDoneCh:     make(chan chan struct{}),
 		connWriteDoneCh:    make(chan chan struct{}),
+		negotiationDone:    make(chan struct{}),
 	}
 	if tc.optionCallback == nil {
 		tc.optionCallback = tc.handleOptionCommand
@@ -103,6 +103,12 @@ func newTelnetConn(opts connOpts) *TelnetConn {
 	fsm := opts.fsm
 	fsm.tc = tc
 	tc.fsm = fsm
+	for k := range tc.serverOpts {
+		tc.unackedServerOpts[k] = true
+	}
+	for k := range tc.clientOpts {
+		tc.unackedClientOpts[k] = true
+	}
 	return tc
 }
 
@@ -172,6 +178,15 @@ func (c *TelnetConn) startNegotiation() {
 		c.unackedClientOpts[k] = true
 		c.sendCmd(DO, k)
 	}
+	select {
+	case <-c.negotiationDone:
+		log.Printf("Negotiation finished")
+		return
+	case <-time.After(10 * time.Second):
+		log.Printf("Negotiation failed. Exiting")
+		c.Close()
+		return
+	}
 }
 
 // Close closes the telnet connection
@@ -215,7 +230,6 @@ func (c *TelnetConn) sendCmd(cmd byte, opt byte) {
 	b := []byte{IAC, cmd, opt}
 	log.Printf("Sending command: %v %v", cmd, opt)
 	c.writeCh <- b
-	//log.Printf("command sent!")
 }
 
 func (c *TelnetConn) handleOptionCommand(cmd byte, opt byte) {
@@ -224,13 +238,16 @@ func (c *TelnetConn) handleOptionCommand(cmd byte, opt byte) {
 			c.sendCmd(DONT, opt)
 			return
 		}
-		if cmd == WONT {
-			delete(c.acceptedOpts, opt)
-		}
+		// if cmd == WONT {
+		// 	delete(c.acceptedOpts, opt)
+		// }
 		// if this is a reply to a DO
 		if _, ok := c.unackedClientOpts[opt]; ok {
 			// remove it from the unackedClientOpts
 			delete(c.unackedClientOpts, opt)
+			if len(c.unackedClientOpts) == 0 && len(c.unackedServerOpts) == 0 {
+				close(c.negotiationDone)
+			}
 		} else {
 			c.sendCmd(DO, opt)
 		}
@@ -241,21 +258,22 @@ func (c *TelnetConn) handleOptionCommand(cmd byte, opt byte) {
 			c.sendCmd(WONT, opt)
 			return
 		}
-		if cmd == DONT {
-			delete(c.acceptedOpts, opt)
-		}
+		// if cmd == DONT {
+		// 	delete(c.acceptedOpts, opt)
+		// }
 		// if this is a reply to a DO
 		if _, ok := c.unackedServerOpts[opt]; ok {
 			log.Printf("removing from the unack list")
 			// remove it from the unackedClientOpts
 			delete(c.unackedServerOpts, opt)
+			if len(c.unackedClientOpts) == 0 && len(c.unackedServerOpts) == 0 {
+				close(c.negotiationDone)
+			}
 		} else {
 			log.Printf("Sending WILL command")
 			c.sendCmd(WILL, opt)
 		}
 	}
-
-	log.Printf("finished handling Option command")
 }
 
 func (c *TelnetConn) dataHandlerWrapper(w io.Writer, r io.Reader) {
@@ -266,11 +284,10 @@ func (c *TelnetConn) dataHandlerWrapper(w io.Writer, r io.Reader) {
 		select {
 		case ch := <-c.dataHandlerCloseCh:
 			ch <- struct{}{}
-			log.Printf("before break")
 			return
 		case <-c.dataWrittenCh:
 			if b, err := ioutil.ReadAll(r); err == nil {
-				log.Printf("read %d bytes", len(b))
+				// log.Printf("data handler read: %s", string(b))
 				c.dataHandler(w, b)
 			}
 		}

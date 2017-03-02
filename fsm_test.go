@@ -14,12 +14,9 @@ type cmd struct {
 	called bool
 }
 
-func (d *cmd) mockCmdHandler(w io.Writer, r io.Reader) {
+func (d *cmd) mockCmdHandler(w io.Writer, b []byte) {
 	d.called = true
-	d.cmdBuf = nil
-	b := make([]byte, 512)
-	n, _ := r.Read(b)
-	d.cmdBuf = b[:n]
+	d.cmdBuf = b
 }
 
 type opt struct {
@@ -86,22 +83,23 @@ func TestFSM(t *testing.T) {
 			conn:        dummyConn,
 			fsm:         fsm,
 			cmdHandler:  cmdPtr.mockCmdHandler,
+			dataHandler: defaultDataHandlerFunc,
 			optCallback: optPtr.optCallback,
 		}
-		newTelnetConn(opts)
+		tc := newTelnetConn(opts)
+		go tc.dataHandlerWrapper(tc.handlerWriter, tc.dataRW)
 		assert.Equal(t, fsm.curState, dataState)
+
 		for i, ch := range s.inputSeq {
 			ns := fsm.nextState(ch)
 			fsm.curState = ns
 			assert.Equal(t, s.expState[i], ns)
-
 			if optPtr.called {
 				assert.Equal(t, s.expOpt[i].cmd, optPtr.cmd)
 				assert.Equal(t, s.expOpt[i].optn, optPtr.optn)
 			} else {
 				assert.Nil(t, s.expOpt[i])
 			}
-
 			if cmdPtr.called {
 				exp := s.expCmd[i].cmdBuf
 				actual := cmdPtr.cmdBuf
@@ -109,7 +107,6 @@ func TestFSM(t *testing.T) {
 			} else {
 				assert.Nil(t, s.expCmd[i])
 			}
-
 			optPtr.called = false
 			cmdPtr.called = false
 		}

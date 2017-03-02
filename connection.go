@@ -244,9 +244,9 @@ func (c *TelnetConn) handleOptionCommand(cmd byte, opt byte) {
 }
 
 func (c *TelnetConn) dataHandlerWrapper(w io.Writer, r io.Reader) {
-	defer func() {
-		c.Close()
-	}()
+	//defer func() {
+	//	c.Close()
+	//}()
 	for {
 		buf := make([]byte, 512)
 		n, err := r.Read(buf)

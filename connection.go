@@ -28,7 +28,6 @@ type TelnetConn struct {
 	serverOpts      map[byte]bool
 	clientOpts      map[byte]bool
 	dataRW          io.ReadWriter
-	cmdBufMutex     *sync.Mutex
 	cmdBuffer       bytes.Buffer
 	fsm             *telnetFSM
 	fsmInputCh      chan byte

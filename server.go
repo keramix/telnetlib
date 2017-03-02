@@ -15,15 +15,20 @@ var defaultDataHandlerFunc = func(w io.Writer, r io.Reader) {
 	for {
 		b := make([]byte, 512)
 		if _, err := r.Read(b); err != nil {
-			break // an EOF means the end of connection
+			return
 		}
 	}
 }
 
 var defaultCmdHandlerFunc = func(w io.Writer, r io.Reader) {
 	// Keep reading and do nothing
-	b := make([]byte, 512)
-	r.Read(b)
+	for {
+		b := make([]byte, 512)
+		_, err := r.Read(b)
+		if err != nil {
+			return
+		}
+	}
 }
 
 type TelnetOpts struct {

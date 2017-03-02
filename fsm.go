@@ -93,6 +93,9 @@ func (fsm *telnetFSM) nextState(ch byte) state {
 			fsm.tc.cmdHandler(fsm.tc.handlerWriter, &fsm.tc.cmdBuffer)
 			fsm.tc.cmdBuffer.Reset()
 			nextState = dataState
+		} else if ch == IAC { // escaping IAC
+			nextState = subnegState
+			fsm.tc.cmdBuffer.WriteByte(ch)
 		} else {
 			nextState = errorState
 		}

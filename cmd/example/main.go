@@ -198,7 +198,7 @@ func main() {
 		ServerOpts: []byte{telnetlib.BINARY, telnetlib.SGA, telnetlib.ECHO},
 		ClientOpts: []byte{telnetlib.BINARY, telnetlib.SGA, VMWARE_EXT},
 		//DataHandler: dhandler,
-		//CmdHandler:  chandler,
+		CmdHandler: chandler,
 	}
 	srvr := telnetlib.NewTelnetServer(opts)
 	for {

@@ -251,9 +251,7 @@ func (c *TelnetConn) dataHandlerWrapper(w io.Writer, r io.Reader) {
 		buf := make([]byte, 512)
 		n, err := r.Read(buf)
 		if n > 0 {
-			if w == nil {
-				log.Printf("w is nil")
-			}
+			log.Printf("read %d bytes", n)
 			c.dataHandler(w, buf[:n])
 		}
 		if err != nil {

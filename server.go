@@ -7,31 +7,12 @@ import (
 	"net"
 )
 
-type DataHandlerFunc func(w io.Writer, r io.Reader)
-type CmdHandlerFunc func(w io.Writer, r io.Reader)
+type DataHandlerFunc func(w io.Writer, data []byte)
+type CmdHandlerFunc func(w io.Writer, cmd []byte)
 
-var defaultDataHandlerFunc = func(w io.Writer, r io.Reader) {
-	// Keep reading and do nothing
-	for {
-		b := make([]byte, 512)
-		if _, err := r.Read(b); err != nil {
-			return
-		}
-	}
-}
+var defaultDataHandlerFunc = func(w io.Writer, data []byte) {}
 
-var defaultCmdHandlerFunc = func(w io.Writer, r io.Reader) {
-	// Keep reading and do nothing
-	log.Printf("running default handler")
-	for {
-		log.Printf("reading")
-		b := make([]byte, 512)
-		_, err := r.Read(b)
-		if err != nil {
-			return
-		}
-	}
-}
+var defaultCmdHandlerFunc = func(w io.Writer, cmd []byte) {}
 
 type TelnetOpts struct {
 	Addr        string
@@ -44,8 +25,8 @@ type TelnetOpts struct {
 type TelnetServer struct {
 	ServerOptions map[byte]bool
 	ClientOptions map[byte]bool
-	DataHandler   func(w io.Writer, r io.Reader)
-	CmdHandler    func(w io.Writer, r io.Reader)
+	DataHandler   DataHandlerFunc
+	CmdHandler    CmdHandlerFunc
 	ln            net.Listener
 }
 
@@ -90,7 +71,7 @@ func (ts *TelnetServer) Accept() (*TelnetConn, error) {
 	tc := newTelnetConn(opts)
 	go tc.connectionLoop()
 	go tc.readLoop()
-	go ts.DataHandler(tc.handlerWriter, tc.dataRW)
+	go tc.dataHandlerWrapper(tc.handlerWriter, tc.dataRW)
 	go tc.fsm.start()
 	go tc.startNegotiation()
 	return tc, nil

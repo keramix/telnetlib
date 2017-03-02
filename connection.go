@@ -12,6 +12,7 @@ type connOpts struct {
 	conn        net.Conn
 	fsm         *telnetFSM
 	cmdHandler  CmdHandlerFunc
+	dataHandler DataHandlerFunc
 	serverOpts  map[byte]bool
 	clientOpts  map[byte]bool
 	optCallback func(byte, byte)
@@ -33,6 +34,7 @@ type TelnetConn struct {
 	fsmInputCh      chan byte
 	handlerWriter   io.Writer
 	cmdHandler      CmdHandlerFunc
+	dataHandler     DataHandlerFunc
 	optionCallback  func(byte, byte)
 	readDoneCh      chan chan struct{}
 	connReadDoneCh  chan chan struct{}
@@ -77,6 +79,7 @@ func newTelnetConn(opts connOpts) *TelnetConn {
 		unackedClientOpts: make(map[byte]bool),
 		//server:            telnetServer,
 		cmdHandler:      opts.cmdHandler,
+		dataHandler:     opts.dataHandler,
 		serverOpts:      opts.serverOpts,
 		clientOpts:      opts.clientOpts,
 		optionCallback:  opts.optCallback,
@@ -238,4 +241,40 @@ func (c *TelnetConn) handleOptionCommand(cmd byte, opt byte) {
 	}
 
 	log.Printf("finished handling Option command")
+}
+
+func (c *TelnetConn) dataHandlerWrapper(w io.Writer, r io.Reader) {
+	defer func() {
+		c.Close()
+	}()
+	for {
+		buf := make([]byte, 512)
+		n, err := r.Read(buf)
+		if n > 0 {
+			c.dataHandler(w, buf[:n])
+		}
+		if err != nil {
+			log.Printf("error: %v", err)
+			break
+		}
+	}
+}
+
+func (c *TelnetConn) cmdHandlerWrapper(w io.Writer, r io.Reader) {
+	var cmd []byte
+	for {
+		buf := make([]byte, 512)
+		n, err := r.Read(buf)
+		if n > 0 {
+			cmd = append(cmd, buf[:n]...)
+		}
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Printf("unexpected error: %v", err)
+			break
+		}
+	}
+	c.cmdHandler(w, cmd)
 }

@@ -68,7 +68,7 @@ func (fsm *telnetFSM) nextState(ch byte) state {
 			nextState = subnegState
 		} else { // anything else
 			fsm.tc.cmdBuffer.WriteByte(ch)
-			fsm.tc.cmdHandler(fsm.tc.handlerWriter, &fsm.tc.cmdBuffer)
+			fsm.tc.cmdHandlerWrapper(fsm.tc.handlerWriter, &fsm.tc.cmdBuffer)
 			fsm.tc.cmdBuffer.Reset()
 			nextState = dataState
 		}
@@ -90,7 +90,7 @@ func (fsm *telnetFSM) nextState(ch byte) state {
 		if ch == SE {
 			fsm.tc.cmdBuffer.WriteByte(ch)
 			//log.Printf("starting the command handler")
-			fsm.tc.cmdHandler(fsm.tc.handlerWriter, &fsm.tc.cmdBuffer)
+			fsm.tc.cmdHandlerWrapper(fsm.tc.handlerWriter, &fsm.tc.cmdBuffer)
 			fsm.tc.cmdBuffer.Reset()
 			nextState = dataState
 		} else if ch == IAC { // escaping IAC

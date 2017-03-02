@@ -170,32 +170,8 @@ func handleVmotionAbort(w io.Writer, b []byte) {
 }
 
 func main() {
-	// This is an echoHandler
-	dhandler = func(w io.Writer, r io.Reader) {
-		log.Printf("************* STARTED DATA HANDLER ***************")
-		for {
-			buf := make([]byte, 512)
-			n1, err := r.Read(buf)
-			if err != nil {
-				//log.Printf("error: %v", err)
-			}
-			if n1 != 0 {
-				//_, err := w.Write(buf)
-				if err != nil {
-					log.Printf("write error: %v", err)
-				}
-			}
-		}
-	}
 
-	chandler = func(w io.Writer, r io.Reader) {
-		b := make([]byte, 512)
-		log.Printf("command recieved")
-		cmdLen, err := r.Read(b)
-		if err != nil && err != io.EOF {
-			panic(err)
-		}
-		b = b[:cmdLen]
+	chandler = func(w io.Writer, b []byte) {
 		if isKnownSuboptions(b) {
 			handleKnownSuboptions(w, b)
 		} else if isDoProxy(b) {

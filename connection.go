@@ -3,6 +3,7 @@ package telnetlib
 import (
 	"bytes"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"sync"
@@ -36,8 +37,8 @@ type TelnetConn struct {
 	cmdHandler         CmdHandlerFunc
 	dataHandler        DataHandlerFunc
 	dataHandlerCloseCh chan chan struct{}
+	dataWrittenCh      chan bool
 	optionCallback     func(byte, byte)
-	readDoneCh         chan chan struct{}
 	connReadDoneCh     chan chan struct{}
 	connWriteDoneCh    chan chan struct{}
 }
@@ -82,11 +83,11 @@ func newTelnetConn(opts connOpts) *TelnetConn {
 		cmdHandler:         opts.cmdHandler,
 		dataHandler:        opts.dataHandler,
 		dataHandlerCloseCh: make(chan chan struct{}),
+		dataWrittenCh:      make(chan bool),
 		serverOpts:         opts.serverOpts,
 		clientOpts:         opts.clientOpts,
 		optionCallback:     opts.optCallback,
 		fsmInputCh:         make(chan byte),
-		readDoneCh:         make(chan chan struct{}),
 		connReadDoneCh:     make(chan chan struct{}),
 		connWriteDoneCh:    make(chan chan struct{}),
 	}
@@ -142,23 +143,20 @@ func (c *TelnetConn) connectionLoop() {
 
 // reads from the connection and dumps into the connection read channel
 func (c *TelnetConn) readLoop() {
+	defer func() {
+		log.Printf("read loop closed")
+	}()
 	for {
-		select {
-		case ch := <-c.readDoneCh:
-			ch <- struct{}{}
-			return
-		default:
-			buf := make([]byte, 256)
-			n, err := c.conn.Read(buf)
-			if n > 0 {
-				log.Printf("read %d bytes from the TCP Connection %v", n, buf[:n])
-				c.readCh <- buf[:n]
-			}
-			if err != nil {
-				log.Printf("connection read: %v", err)
-				// This should happen if client closes connection
-				c.Close()
-			}
+		buf := make([]byte, 4096)
+		n, err := c.conn.Read(buf)
+		if n > 0 {
+			log.Printf("read %d bytes from the TCP Connection %v", n, buf[:n])
+			c.readCh <- buf[:n]
+		}
+		if err != nil {
+			log.Printf("connection read: %v", err)
+			c.Close()
+			break
 		}
 	}
 }
@@ -180,27 +178,37 @@ func (c *TelnetConn) startNegotiation() {
 func (c *TelnetConn) Close() {
 	log.Printf("Closing the connection")
 	c.conn.Close()
-	readLoopCh := make(chan struct{})
+	c.closeConnLoopRead()
+	c.closeConnLoopWrite()
+	c.closeFSM()
+	c.closeDatahandler()
+	log.Printf("telnet connection closed")
+}
+
+func (c *TelnetConn) closeConnLoopRead() {
 	connLoopReadCh := make(chan struct{})
-	connLoopWriteCh := make(chan struct{})
-	fsmCh := make(chan struct{})
-	dataCh := make(chan struct{})
-	c.readDoneCh <- readLoopCh
-	<-readLoopCh
-	log.Printf("read loop closed")
 	c.connReadDoneCh <- connLoopReadCh
 	<-connLoopReadCh
-	log.Printf("fsm loop closed")
+	log.Printf("connection loop read-side closed")
+}
+
+func (c *TelnetConn) closeConnLoopWrite() {
+	connLoopWriteCh := make(chan struct{})
 	c.connWriteDoneCh <- connLoopWriteCh
 	<-connLoopWriteCh
-	log.Printf("write loop closed")
+	log.Printf("connection loop write-side closed")
+}
+
+func (c *TelnetConn) closeFSM() {
+	fsmCh := make(chan struct{})
 	c.fsm.doneCh <- fsmCh
 	<-fsmCh
-	log.Printf("fsm closed")
+}
+
+func (c *TelnetConn) closeDatahandler() {
+	dataCh := make(chan struct{})
 	c.dataHandlerCloseCh <- dataCh
 	<-dataCh
-	log.Printf("exiting data handler")
-	log.Printf("telnet connection closed")
 }
 
 func (c *TelnetConn) sendCmd(cmd byte, opt byte) {
@@ -251,38 +259,26 @@ func (c *TelnetConn) handleOptionCommand(cmd byte, opt byte) {
 }
 
 func (c *TelnetConn) dataHandlerWrapper(w io.Writer, r io.Reader) {
+	defer func() {
+		log.Printf("data handler closed")
+	}()
 	for {
 		select {
 		case ch := <-c.dataHandlerCloseCh:
 			ch <- struct{}{}
-		default:
-			buf := make([]byte, 512)
-			n, _ := r.Read(buf)
-			if n > 0 {
-				log.Printf("read %d bytes", n)
-				log.Printf("%v", w)
-				log.Printf("%v", buf[:n])
-				c.dataHandler(w, buf[:n])
+			log.Printf("before break")
+			return
+		case <-c.dataWrittenCh:
+			if b, err := ioutil.ReadAll(r); err == nil {
+				log.Printf("read %d bytes", len(b))
+				c.dataHandler(w, b)
 			}
 		}
 	}
 }
 
 func (c *TelnetConn) cmdHandlerWrapper(w io.Writer, r io.Reader) {
-	var cmd []byte
-	for {
-		buf := make([]byte, 512)
-		n, err := r.Read(buf)
-		if n > 0 {
-			cmd = append(cmd, buf[:n]...)
-		}
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			log.Printf("unexpected error: %v", err)
-			break
-		}
+	if cmd, err := ioutil.ReadAll(r); err == nil {
+		c.cmdHandler(w, cmd)
 	}
-	c.cmdHandler(w, cmd)
 }

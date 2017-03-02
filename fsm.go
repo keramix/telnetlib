@@ -28,6 +28,9 @@ func newTelnetFSM() *telnetFSM {
 }
 
 func (fsm *telnetFSM) start() {
+	defer func() {
+		log.Printf("FSM closed")
+	}()
 	for {
 		select {
 		case ch := <-fsm.tc.fsmInputCh:
@@ -50,6 +53,7 @@ func (fsm *telnetFSM) nextState(ch byte) state {
 		if ch != IAC {
 			//log.Printf("FSM is writing %d to the dataRW", ch)
 			fsm.tc.dataRW.Write(b)
+			fsm.tc.dataWrittenCh <- true
 			//log.Printf("FSM finished writing to the dataRW")
 			nextState = dataState
 		} else {
@@ -59,6 +63,7 @@ func (fsm *telnetFSM) nextState(ch byte) state {
 	case cmdState:
 		if ch == IAC { // this is an escaping of IAC to send it as data
 			fsm.tc.dataRW.Write(b)
+			fsm.tc.dataWrittenCh <- true
 			nextState = dataState
 		} else if ch == DO || ch == DONT || ch == WILL || ch == WONT {
 			fsm.tc.cmdBuffer.WriteByte(ch)

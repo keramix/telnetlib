@@ -5,6 +5,8 @@ import (
 	"crypto/rand"
 	"io"
 	"log"
+	"os"
+	"runtime/pprof"
 
 	"github.com/kreamyx/telnetlib"
 )
@@ -194,19 +196,19 @@ func main() {
 	// FIXME: Handle the case when cmdHandler and DataHandler are nil
 	// Default handler should just read bytes and do nothing with them
 	opts := telnetlib.TelnetOpts{
-		Addr:       ":6779",
-		ServerOpts: []byte{telnetlib.BINARY, telnetlib.SGA, telnetlib.ECHO},
-		ClientOpts: []byte{telnetlib.BINARY, telnetlib.SGA, VMWARE_EXT},
+		Addr: ":6779",
+		//ServerOpts: []byte{telnetlib.BINARY, telnetlib.SGA, telnetlib.ECHO},
+		//ClientOpts: []byte{telnetlib.BINARY, telnetlib.SGA, VMWARE_EXT},
 		//DataHandler: dhandler,
-		CmdHandler: chandler,
+		//CmdHandler: chandler,
 	}
 	srvr := telnetlib.NewTelnetServer(opts)
 	for {
+		pprof.Lookup("goroutine").WriteTo(os.Stdout, 1)
+
 		_, err := srvr.Accept()
 		if err != nil {
 			panic(err)
 		}
-		//time.Sleep(10 * time.Second)
-		//conn.Close()
 	}
 }

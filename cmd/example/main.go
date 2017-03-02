@@ -220,7 +220,7 @@ func main() {
 	opts := telnetlib.TelnetOpts{
 		Addr:       ":6779",
 		ServerOpts: []byte{telnetlib.BINARY, telnetlib.SGA, telnetlib.ECHO},
-		ClientOpts: []byte{telnetlib.BINARY, telnetlib.SGA, VMWARE_EXT},
+		ClientOpts: []byte{telnetlib.BINARY, telnetlib.SGA},
 		//DataHandler: dhandler,
 		//CmdHandler:  chandler,
 	}

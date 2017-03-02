@@ -22,7 +22,9 @@ var defaultDataHandlerFunc = func(w io.Writer, r io.Reader) {
 
 var defaultCmdHandlerFunc = func(w io.Writer, r io.Reader) {
 	// Keep reading and do nothing
+	log.Printf("running default handler")
 	for {
+		log.Printf("reading")
 		b := make([]byte, 512)
 		_, err := r.Read(b)
 		if err != nil {

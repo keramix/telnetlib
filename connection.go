@@ -44,13 +44,14 @@ type TelnetConn struct {
 // Safely read/write concurrently to the data Buffer
 // databuffer is written to by the FSM and it is read from by the dataHandler
 type dataReadWriter struct {
-	dataBuffer *bytes.Buffer
+	dataBuffer bytes.Buffer
 	dataMux    *sync.Mutex
 }
 
 func (drw *dataReadWriter) Read(p []byte) (int, error) {
 	drw.dataMux.Lock()
 	defer drw.dataMux.Unlock()
+
 	return drw.dataBuffer.Read(p)
 }
 
@@ -95,8 +96,7 @@ func newTelnetConn(opts connOpts) *TelnetConn {
 		ch: tc.writeCh,
 	}
 	tc.dataRW = &dataReadWriter{
-		dataBuffer: bytes.NewBuffer(make([]byte, 512)),
-		dataMux:    new(sync.Mutex),
+		dataMux: new(sync.Mutex),
 	}
 	fsm := opts.fsm
 	fsm.tc = tc

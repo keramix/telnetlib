@@ -62,11 +62,12 @@ func (ts *TelnetServer) Accept() (*TelnetConn, error) {
 	conn, _ := ts.ln.Accept()
 	log.Printf("connection received")
 	opts := connOpts{
-		conn:       conn,
-		cmdHandler: ts.CmdHandler,
-		serverOpts: ts.ServerOptions,
-		clientOpts: ts.ClientOptions,
-		fsm:        newTelnetFSM(),
+		conn:        conn,
+		cmdHandler:  ts.CmdHandler,
+		dataHandler: ts.DataHandler,
+		serverOpts:  ts.ServerOptions,
+		clientOpts:  ts.ClientOptions,
+		fsm:         newTelnetFSM(),
 	}
 	tc := newTelnetConn(opts)
 	go tc.connectionLoop()

@@ -2,6 +2,7 @@ package telnetlib
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -248,6 +249,8 @@ func (c *TelnetConn) dataHandlerWrapper(w io.Writer, r io.Reader) {
 		n, _ := r.Read(buf)
 		if n > 0 {
 			log.Printf("read %d bytes", n)
+			fmt.Printf("%v", w)
+			fmt.Printf("%v", buf[:n])
 			c.dataHandler(w, buf[:n])
 		}
 	}

@@ -26,19 +26,20 @@ type TelnetConn struct {
 	unackedServerOpts map[byte]bool
 	unackedClientOpts map[byte]bool
 	//server            *TelnetServer
-	serverOpts      map[byte]bool
-	clientOpts      map[byte]bool
-	dataRW          io.ReadWriter
-	cmdBuffer       bytes.Buffer
-	fsm             *telnetFSM
-	fsmInputCh      chan byte
-	handlerWriter   io.Writer
-	cmdHandler      CmdHandlerFunc
-	dataHandler     DataHandlerFunc
-	optionCallback  func(byte, byte)
-	readDoneCh      chan chan struct{}
-	connReadDoneCh  chan chan struct{}
-	connWriteDoneCh chan chan struct{}
+	serverOpts         map[byte]bool
+	clientOpts         map[byte]bool
+	dataRW             io.ReadWriter
+	cmdBuffer          bytes.Buffer
+	fsm                *telnetFSM
+	fsmInputCh         chan byte
+	handlerWriter      io.Writer
+	cmdHandler         CmdHandlerFunc
+	dataHandler        DataHandlerFunc
+	dataHandlerCloseCh chan chan struct{}
+	optionCallback     func(byte, byte)
+	readDoneCh         chan chan struct{}
+	connReadDoneCh     chan chan struct{}
+	connWriteDoneCh    chan chan struct{}
 }
 
 // Safely read/write concurrently to the data Buffer
@@ -78,15 +79,16 @@ func newTelnetConn(opts connOpts) *TelnetConn {
 		unackedServerOpts: make(map[byte]bool),
 		unackedClientOpts: make(map[byte]bool),
 		//server:            telnetServer,
-		cmdHandler:      opts.cmdHandler,
-		dataHandler:     opts.dataHandler,
-		serverOpts:      opts.serverOpts,
-		clientOpts:      opts.clientOpts,
-		optionCallback:  opts.optCallback,
-		fsmInputCh:      make(chan byte),
-		readDoneCh:      make(chan chan struct{}),
-		connReadDoneCh:  make(chan chan struct{}),
-		connWriteDoneCh: make(chan chan struct{}),
+		cmdHandler:         opts.cmdHandler,
+		dataHandler:        opts.dataHandler,
+		dataHandlerCloseCh: make(chan chan struct{}),
+		serverOpts:         opts.serverOpts,
+		clientOpts:         opts.clientOpts,
+		optionCallback:     opts.optCallback,
+		fsmInputCh:         make(chan byte),
+		readDoneCh:         make(chan chan struct{}),
+		connReadDoneCh:     make(chan chan struct{}),
+		connWriteDoneCh:    make(chan chan struct{}),
 	}
 	if tc.optionCallback == nil {
 		tc.optionCallback = tc.handleOptionCommand
@@ -148,13 +150,15 @@ func (c *TelnetConn) readLoop() {
 		default:
 			buf := make([]byte, 256)
 			n, err := c.conn.Read(buf)
-			if err != nil {
-				//log.Printf("read error: %v", err)
-			}
 			if n > 0 {
 				log.Printf("read %d bytes from the TCP Connection %v", n, buf[:n])
+				c.readCh <- buf[:n]
 			}
-			c.readCh <- buf[:n]
+			if err != nil {
+				log.Printf("connection read: %v", err)
+				// This should happen if client closes connection
+				c.Close()
+			}
 		}
 	}
 }
@@ -180,6 +184,7 @@ func (c *TelnetConn) Close() {
 	connLoopReadCh := make(chan struct{})
 	connLoopWriteCh := make(chan struct{})
 	fsmCh := make(chan struct{})
+	dataCh := make(chan struct{})
 	c.readDoneCh <- readLoopCh
 	<-readLoopCh
 	log.Printf("read loop closed")
@@ -192,6 +197,9 @@ func (c *TelnetConn) Close() {
 	c.fsm.doneCh <- fsmCh
 	<-fsmCh
 	log.Printf("fsm closed")
+	c.dataHandlerCloseCh <- dataCh
+	<-dataCh
+	log.Printf("exiting data handler")
 	log.Printf("telnet connection closed")
 }
 
@@ -244,13 +252,18 @@ func (c *TelnetConn) handleOptionCommand(cmd byte, opt byte) {
 
 func (c *TelnetConn) dataHandlerWrapper(w io.Writer, r io.Reader) {
 	for {
-		buf := make([]byte, 512)
-		n, _ := r.Read(buf)
-		if n > 0 {
-			log.Printf("read %d bytes", n)
-			log.Printf("%v", w)
-			log.Printf("%v", buf[:n])
-			c.dataHandler(w, buf[:n])
+		select {
+		case ch := <-c.dataHandlerCloseCh:
+			ch <- struct{}{}
+		default:
+			buf := make([]byte, 512)
+			n, _ := r.Read(buf)
+			if n > 0 {
+				log.Printf("read %d bytes", n)
+				log.Printf("%v", w)
+				log.Printf("%v", buf[:n])
+				c.dataHandler(w, buf[:n])
+			}
 		}
 	}
 }

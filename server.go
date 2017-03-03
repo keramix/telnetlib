@@ -7,12 +7,12 @@ import (
 	"net"
 )
 
-type DataHandlerFunc func(w io.Writer, data []byte)
-type CmdHandlerFunc func(w io.Writer, cmd []byte)
+type DataHandlerFunc func(w io.Writer, data []byte, tc *TelnetConn)
+type CmdHandlerFunc func(w io.Writer, cmd []byte, tc *TelnetConn)
 
-var defaultDataHandlerFunc = func(w io.Writer, data []byte) {}
+var defaultDataHandlerFunc = func(w io.Writer, data []byte, tc *TelnetConn) {}
 
-var defaultCmdHandlerFunc = func(w io.Writer, cmd []byte) {}
+var defaultCmdHandlerFunc = func(w io.Writer, cmd []byte, tc *TelnetConn) {}
 
 type TelnetOpts struct {
 	Addr        string

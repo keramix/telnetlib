@@ -288,7 +288,7 @@ func (c *TelnetConn) dataHandlerWrapper(w io.Writer, r io.Reader) {
 		case <-c.dataWrittenCh:
 			if b, err := ioutil.ReadAll(r); err == nil {
 				// log.Printf("data handler read: %s", string(b))
-				c.dataHandler(w, b)
+				c.dataHandler(w, b, c)
 			}
 		}
 	}
@@ -296,6 +296,6 @@ func (c *TelnetConn) dataHandlerWrapper(w io.Writer, r io.Reader) {
 
 func (c *TelnetConn) cmdHandlerWrapper(w io.Writer, r io.Reader) {
 	if cmd, err := ioutil.ReadAll(r); err == nil {
-		c.cmdHandler(w, cmd)
+		c.cmdHandler(w, cmd, c)
 	}
 }

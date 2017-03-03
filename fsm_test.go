@@ -14,7 +14,7 @@ type cmd struct {
 	called bool
 }
 
-func (d *cmd) mockCmdHandler(w io.Writer, b []byte) {
+func (d *cmd) mockCmdHandler(w io.Writer, b []byte, tc *TelnetConn) {
 	d.called = true
 	d.cmdBuf = b
 }

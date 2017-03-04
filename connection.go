@@ -42,6 +42,7 @@ type TelnetConn struct {
 	connReadDoneCh     chan chan struct{}
 	connWriteDoneCh    chan chan struct{}
 	negotiationDone    chan struct{}
+	closedMutex        sync.Mutex
 	closed             bool
 }
 
@@ -201,6 +202,8 @@ func (c *TelnetConn) Close() {
 	c.closeFSM()
 	c.closeDatahandler()
 	log.Printf("telnet connection closed")
+	c.closedMutex.Lock()
+	defer c.closedMutex.Unlock()
 	c.closed = true
 }
 
@@ -305,5 +308,7 @@ func (c *TelnetConn) cmdHandlerWrapper(w io.Writer, r io.Reader) {
 }
 
 func (c *TelnetConn) IsClosed() bool {
+	c.closedMutex.Lock()
+	defer c.closedMutex.Unlock()
 	return c.closed
 }

@@ -42,6 +42,7 @@ type TelnetConn struct {
 	connReadDoneCh     chan chan struct{}
 	connWriteDoneCh    chan chan struct{}
 	negotiationDone    chan struct{}
+	closed             bool
 }
 
 // Safely read/write concurrently to the data Buffer
@@ -90,6 +91,7 @@ func newTelnetConn(opts connOpts) *TelnetConn {
 		connReadDoneCh:     make(chan chan struct{}),
 		connWriteDoneCh:    make(chan chan struct{}),
 		negotiationDone:    make(chan struct{}),
+		closed:             false,
 	}
 	if tc.optionCallback == nil {
 		tc.optionCallback = tc.handleOptionCommand
@@ -185,6 +187,7 @@ func (c *TelnetConn) startNegotiation() {
 	case <-time.After(10 * time.Second):
 		log.Printf("Negotiation failed. Exiting")
 		c.Close()
+		c.closed = true
 		return
 	}
 }
@@ -198,6 +201,7 @@ func (c *TelnetConn) Close() {
 	c.closeFSM()
 	c.closeDatahandler()
 	log.Printf("telnet connection closed")
+	c.closed = true
 }
 
 func (c *TelnetConn) closeConnLoopRead() {
@@ -298,4 +302,8 @@ func (c *TelnetConn) cmdHandlerWrapper(w io.Writer, r io.Reader) {
 	if cmd, err := ioutil.ReadAll(r); err == nil {
 		c.cmdHandler(w, cmd, c)
 	}
+}
+
+func (c *TelnetConn) IsClosed() bool {
+	return c.closed
 }

@@ -3,8 +3,9 @@ package telnetlib
 import (
 	"fmt"
 	"io"
-	"log"
 	"net"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 type DataHandlerFunc func(w io.Writer, data []byte, tc *TelnetConn)
@@ -60,7 +61,7 @@ func NewTelnetServer(opts TelnetOpts) *TelnetServer {
 // Accept accepts a connection and returns the Telnet connection
 func (ts *TelnetServer) Accept() (*TelnetConn, error) {
 	conn, _ := ts.ln.Accept()
-	log.Printf("connection received")
+	log.Info("connection received")
 	opts := connOpts{
 		conn:        conn,
 		cmdHandler:  ts.CmdHandler,

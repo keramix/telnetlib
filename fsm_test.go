@@ -4,10 +4,56 @@ import (
 	"bytes"
 	"io"
 	"log"
+	"net"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
+
+type mockConn struct {
+	r io.Reader
+	w io.Writer
+}
+
+func (c *mockConn) Read(b []byte) (int, error) {
+	return c.r.Read(b)
+}
+
+func (c *mockConn) Write(b []byte) (int, error) {
+	return c.w.Write(b)
+}
+
+func (c *mockConn) Close() error {
+	return nil
+}
+
+func (c *mockConn) LocalAddr() net.Addr {
+	return nil
+}
+
+func (c *mockConn) RemoteAddr() net.Addr {
+	return nil
+}
+
+func (c *mockConn) SetDeadline(t time.Time) error {
+	return nil
+}
+
+func (c *mockConn) SetReadDeadline(t time.Time) error {
+	return nil
+}
+
+func (c *mockConn) SetWriteDeadline(t time.Time) error {
+	return nil
+}
+
+func newMockConn(r io.Reader, w io.Writer) net.Conn {
+	return &mockConn{
+		r: r,
+		w: w,
+	}
+}
 
 type cmd struct {
 	cmdBuf []byte
@@ -46,22 +92,22 @@ var samples = []testSample{
 		expCmd:   []*cmd{nil, nil, nil, nil, nil, nil, nil},
 	},
 	testSample{
-		inputSeq: []byte{IAC, DO, ECHO, 10, 20, IAC, WILL, SGA},
+		inputSeq: []byte{Iac, Do, Echo, 10, 20, Iac, Will, Sga},
 		expState: []state{cmdState, optionNegotiationState, dataState, dataState, dataState, cmdState, optionNegotiationState, dataState},
-		expOpt:   []*opt{nil, nil, &opt{DO, ECHO, true}, nil, nil, nil, nil, &opt{WILL, SGA, true}},
+		expOpt:   []*opt{nil, nil, &opt{Do, Echo, true}, nil, nil, nil, nil, &opt{Will, Sga, true}},
 		expCmd:   []*cmd{nil, nil, nil, nil, nil, nil, nil, nil},
 	},
 	testSample{
-		inputSeq: []byte{10, 20, IAC, AYT, 5, IAC, AO},
+		inputSeq: []byte{10, 20, Iac, Ayt, 5, Iac, Ao},
 		expState: []state{dataState, dataState, cmdState, dataState, dataState, cmdState, dataState},
 		expOpt:   []*opt{nil, nil, nil, nil, nil, nil, nil},
-		expCmd:   []*cmd{nil, nil, nil, &cmd{[]byte{AYT}, true}, nil, nil, &cmd{[]byte{AO}, true}},
+		expCmd:   []*cmd{nil, nil, nil, &cmd{[]byte{Ayt}, true}, nil, nil, &cmd{[]byte{Ao}, true}},
 	},
 	testSample{
-		inputSeq: []byte{10, IAC, SB, 5, 12, IAC, SE},
+		inputSeq: []byte{10, Iac, Sb, 5, 12, Iac, Se},
 		expState: []state{dataState, cmdState, subnegState, subnegState, subnegState, subnegEndState, dataState},
 		expOpt:   []*opt{nil, nil, nil, nil, nil, nil, nil},
-		expCmd:   []*cmd{nil, nil, nil, nil, nil, nil, &cmd{[]byte{SB, 5, 12, SE}, true}},
+		expCmd:   []*cmd{nil, nil, nil, nil, nil, nil, &cmd{[]byte{Sb, 5, 12, Se}, true}},
 	},
 }
 

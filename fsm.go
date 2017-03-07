@@ -1,6 +1,6 @@
 package telnetlib
 
-import "log"
+import log "github.com/Sirupsen/logrus"
 
 type state int
 
@@ -29,12 +29,12 @@ func newTelnetFSM() *telnetFSM {
 
 func (fsm *telnetFSM) start() {
 	defer func() {
-		log.Printf("FSM closed")
+		log.Infof("FSM closed")
 	}()
 	for {
 		select {
 		case ch := <-fsm.tc.fsmInputCh:
-			//log.Printf("FSM state is %d", fsm.curState)
+			//log.Infof("FSM state is %d", fsm.curState)
 			ns := fsm.nextState(ch)
 			fsm.curState = ns
 		case ch := <-fsm.doneCh:
@@ -50,25 +50,23 @@ func (fsm *telnetFSM) nextState(ch byte) state {
 	b := []byte{ch}
 	switch fsm.curState {
 	case dataState:
-		if ch != IAC {
-			//log.Printf("FSM is writing %d to the dataRW", ch)
+		if ch != Iac {
 			fsm.tc.dataRW.Write(b)
 			fsm.tc.dataWrittenCh <- true
-			//log.Printf("FSM finished writing to the dataRW")
 			nextState = dataState
 		} else {
 			nextState = cmdState
 		}
 
 	case cmdState:
-		if ch == IAC { // this is an escaping of IAC to send it as data
+		if ch == Iac { // this is an escaping of IAC to send it as data
 			fsm.tc.dataRW.Write(b)
 			fsm.tc.dataWrittenCh <- true
 			nextState = dataState
-		} else if ch == DO || ch == DONT || ch == WILL || ch == WONT {
+		} else if ch == Do || ch == Dont || ch == Will || ch == Wont {
 			fsm.tc.cmdBuffer.WriteByte(ch)
 			nextState = optionNegotiationState
-		} else if ch == SB {
+		} else if ch == Sb {
 			fsm.tc.cmdBuffer.WriteByte(ch)
 			nextState = subnegState
 		} else { // anything else
@@ -85,20 +83,19 @@ func (fsm *telnetFSM) nextState(ch byte) state {
 		fsm.tc.cmdBuffer.Reset()
 		nextState = dataState
 	case subnegState:
-		if ch == IAC {
+		if ch == Iac {
 			nextState = subnegEndState
 		} else {
 			nextState = subnegState
 			fsm.tc.cmdBuffer.WriteByte(ch)
 		}
 	case subnegEndState:
-		if ch == SE {
+		if ch == Se {
 			fsm.tc.cmdBuffer.WriteByte(ch)
-			//log.Printf("starting the command handler")
 			fsm.tc.cmdHandlerWrapper(fsm.tc.handlerWriter, &fsm.tc.cmdBuffer)
 			fsm.tc.cmdBuffer.Reset()
 			nextState = dataState
-		} else if ch == IAC { // escaping IAC
+		} else if ch == Iac { // escaping IAC
 			nextState = subnegState
 			fsm.tc.cmdBuffer.WriteByte(ch)
 		} else {
@@ -106,7 +103,7 @@ func (fsm *telnetFSM) nextState(ch byte) state {
 		}
 	case errorState:
 		nextState = dataState
-		log.Printf("Finite state machine is in an error state. This should not happen for correct telnel protocol syntax")
+		log.Infof("Finite state machine is in an error state. This should not happen for correct telnet protocol syntax")
 	}
 	return nextState
 }

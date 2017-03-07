@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"sync"
 	"time"
+
+	log "github.com/Sirupsen/logrus"
 )
 
 type connOpts struct {
@@ -21,29 +22,48 @@ type connOpts struct {
 }
 
 type TelnetConn struct {
+	// conn is the underlying connection
 	conn              net.Conn
 	readCh            chan []byte
 	writeCh           chan []byte
 	unackedServerOpts map[byte]bool
 	unackedClientOpts map[byte]bool
 	//server            *TelnetServer
-	serverOpts         map[byte]bool
-	clientOpts         map[byte]bool
-	dataRW             io.ReadWriter
-	cmdBuffer          bytes.Buffer
-	fsm                *telnetFSM
-	fsmInputCh         chan byte
-	handlerWriter      io.Writer
-	cmdHandler         CmdHandlerFunc
-	dataHandler        DataHandlerFunc
+	serverOpts map[byte]bool
+	clientOpts map[byte]bool
+
+	// dataRW is the data buffer. It is written to by the FSM and read from by the data handler
+	dataRW        io.ReadWriter
+	cmdBuffer     bytes.Buffer
+	fsm           *telnetFSM
+	fsmInputCh    chan byte
+	handlerWriter io.WriteCloser
+	// cmdHandler is the command handler for the telnet server
+	// it is a callback function when receiving commands issued by the telnet client
+	// it is wrapped by the cmdHandlerWrapper
+	cmdHandler CmdHandlerFunc
+
+	// dataHandler is the data handler of the telnet server
+	// it is a call back function when recieving data from the telnet client
+	// it is wrapped by the dataHandlerWrapper
+	dataHandler DataHandlerFunc
+
+	// used in the dataHandlerWrapper to notify that the telnet connection is closed
 	dataHandlerCloseCh chan chan struct{}
-	dataWrittenCh      chan bool
-	optionCallback     func(byte, byte)
-	connReadDoneCh     chan chan struct{}
-	connWriteDoneCh    chan chan struct{}
-	negotiationDone    chan struct{}
-	closedMutex        sync.Mutex
-	closed             bool
+	// used in the dataHandlerWrapper to notify that data has been writeen to the dataRW buffer
+	dataWrittenCh chan bool
+
+	// callBack function for receiving an option during negotiation
+	optionCallback func(byte, byte)
+
+	// connReadDoneCh and connWriteDoneCh closes the connection loop when the telnet connection is closed
+	connReadDoneCh  chan chan struct{}
+	connWriteDoneCh chan chan struct{}
+	// negotiationDone notifies that telnet negotiation has been done
+	negotiationDone chan struct{}
+
+	closedMutex sync.Mutex
+	closed      bool
 }
 
 // Safely read/write concurrently to the data Buffer
@@ -70,8 +90,16 @@ type connectionWriter struct {
 }
 
 func (cw *connectionWriter) Write(b []byte) (int, error) {
-	cw.ch <- b
+	if cw.ch != nil {
+		cw.ch <- b
+	}
 	return len(b), nil
+}
+
+func (cw *connectionWriter) Close() error {
+	close(cw.ch)
+	cw.ch = nil
+	return nil
 }
 
 func newTelnetConn(opts connOpts) *TelnetConn {
@@ -116,16 +144,14 @@ func newTelnetConn(opts connOpts) *TelnetConn {
 }
 
 func (c *TelnetConn) connectionLoop() {
-	log.Printf("Entered connectionLoop")
+	log.Debugf("Entered connectionLoop")
 	// this is the reading thread
 	go func() {
 		for {
 			select {
 			case readBytes := <-c.readCh:
 				for _, ch := range readBytes {
-					//log.Printf("putting character %v on the fsm", ch)
 					c.fsmInputCh <- ch
-					//log.Printf("character already put on the fsm")
 				}
 
 			case ch := <-c.connReadDoneCh:
@@ -139,9 +165,7 @@ func (c *TelnetConn) connectionLoop() {
 		for {
 			select {
 			case writeBytes := <-c.writeCh:
-				//log.Printf("writing to the connection")
 				c.conn.Write(writeBytes)
-			//log.Printf("connections already wrote")
 			case ch := <-c.connWriteDoneCh:
 				ch <- struct{}{}
 				return
@@ -153,17 +177,17 @@ func (c *TelnetConn) connectionLoop() {
 // reads from the connection and dumps into the connection read channel
 func (c *TelnetConn) readLoop() {
 	defer func() {
-		log.Printf("read loop closed")
+		log.Debugf("read loop closed")
 	}()
 	for {
 		buf := make([]byte, 4096)
 		n, err := c.conn.Read(buf)
 		if n > 0 {
-			log.Printf("read %d bytes from the TCP Connection %v", n, buf[:n])
+			log.Debugf("read %d bytes from the TCP Connection %v", n, buf[:n])
 			c.readCh <- buf[:n]
 		}
 		if err != nil {
-			log.Printf("connection read: %v", err)
+			log.Debugf("connection read: %v", err)
 			c.Close()
 			break
 		}
@@ -172,21 +196,21 @@ func (c *TelnetConn) readLoop() {
 
 func (c *TelnetConn) startNegotiation() {
 	for k := range c.serverOpts {
-		log.Printf("sending WILL %d", k)
+		log.Infof("sending WILL %d", k)
 		c.unackedServerOpts[k] = true
-		c.sendCmd(WILL, k)
+		c.sendCmd(Will, k)
 	}
 	for k := range c.clientOpts {
-		log.Printf("sending DO %d", k)
+		log.Infof("sending DO %d", k)
 		c.unackedClientOpts[k] = true
-		c.sendCmd(DO, k)
+		c.sendCmd(Do, k)
 	}
 	select {
 	case <-c.negotiationDone:
-		log.Printf("Negotiation finished")
+		log.Infof("Negotiation finished")
 		return
 	case <-time.After(10 * time.Second):
-		log.Printf("Negotiation failed. Exiting")
+		log.Infof("Negotiation failed. Exiting")
 		c.Close()
 		c.closed = true
 		return
@@ -195,13 +219,14 @@ func (c *TelnetConn) startNegotiation() {
 
 // Close closes the telnet connection
 func (c *TelnetConn) Close() {
-	log.Printf("Closing the connection")
+	log.Infof("Closing the connection")
 	c.conn.Close()
 	c.closeConnLoopRead()
 	c.closeConnLoopWrite()
 	c.closeFSM()
 	c.closeDatahandler()
-	log.Printf("telnet connection closed")
+	c.handlerWriter.Close()
+	log.Infof("telnet connection closed")
 	c.closedMutex.Lock()
 	defer c.closedMutex.Unlock()
 	c.closed = true
@@ -211,14 +236,14 @@ func (c *TelnetConn) closeConnLoopRead() {
 	connLoopReadCh := make(chan struct{})
 	c.connReadDoneCh <- connLoopReadCh
 	<-connLoopReadCh
-	log.Printf("connection loop read-side closed")
+	log.Infof("connection loop read-side closed")
 }
 
 func (c *TelnetConn) closeConnLoopWrite() {
 	connLoopWriteCh := make(chan struct{})
 	c.connWriteDoneCh <- connLoopWriteCh
 	<-connLoopWriteCh
-	log.Printf("connection loop write-side closed")
+	log.Infof("connection loop write-side closed")
 }
 
 func (c *TelnetConn) closeFSM() {
@@ -234,58 +259,49 @@ func (c *TelnetConn) closeDatahandler() {
 }
 
 func (c *TelnetConn) sendCmd(cmd byte, opt byte) {
-	b := []byte{IAC, cmd, opt}
-	log.Printf("Sending command: %v %v", cmd, opt)
+	b := []byte{Iac, cmd, opt}
+	log.Infof("Sending command: %v %v", cmd, opt)
 	c.writeCh <- b
 }
 
 func (c *TelnetConn) handleOptionCommand(cmd byte, opt byte) {
-	if cmd == WILL || cmd == WONT {
+	if cmd == Will || cmd == Wont {
 		if _, ok := c.clientOpts[opt]; !ok {
-			c.sendCmd(DONT, opt)
+			c.sendCmd(Dont, opt)
 			return
 		}
-		// if cmd == WONT {
-		// 	delete(c.acceptedOpts, opt)
-		// }
-		// if this is a reply to a DO
+
 		if _, ok := c.unackedClientOpts[opt]; ok {
-			// remove it from the unackedClientOpts
 			delete(c.unackedClientOpts, opt)
 			if len(c.unackedClientOpts) == 0 && len(c.unackedServerOpts) == 0 {
 				close(c.negotiationDone)
 			}
 		} else {
-			c.sendCmd(DO, opt)
+			c.sendCmd(Do, opt)
 		}
 	}
 
-	if cmd == DO || cmd == DONT {
+	if cmd == Do || cmd == Dont {
 		if _, ok := c.serverOpts[opt]; !ok {
-			c.sendCmd(WONT, opt)
+			c.sendCmd(Wont, opt)
 			return
 		}
-		// if cmd == DONT {
-		// 	delete(c.acceptedOpts, opt)
-		// }
-		// if this is a reply to a DO
 		if _, ok := c.unackedServerOpts[opt]; ok {
-			log.Printf("removing from the unack list")
-			// remove it from the unackedClientOpts
+			log.Infof("removing from the unack list")
 			delete(c.unackedServerOpts, opt)
 			if len(c.unackedClientOpts) == 0 && len(c.unackedServerOpts) == 0 {
 				close(c.negotiationDone)
 			}
 		} else {
-			log.Printf("Sending WILL command")
-			c.sendCmd(WILL, opt)
+			log.Infof("Sending WILL command")
+			c.sendCmd(Will, opt)
 		}
 	}
 }
 
 func (c *TelnetConn) dataHandlerWrapper(w io.Writer, r io.Reader) {
 	defer func() {
-		log.Printf("data handler closed")
+		log.Infof("data handler closed")
 	}()
 	for {
 		select {
@@ -294,7 +310,6 @@ func (c *TelnetConn) dataHandlerWrapper(w io.Writer, r io.Reader) {
 			return
 		case <-c.dataWrittenCh:
 			if b, err := ioutil.ReadAll(r); err == nil {
-				// log.Printf("data handler read: %s", string(b))
 				c.dataHandler(w, b, c)
 			}
 		}
@@ -307,6 +322,7 @@ func (c *TelnetConn) cmdHandlerWrapper(w io.Writer, r io.Reader) {
 	}
 }
 
+// IsClosed returns true if the connection is already closed
 func (c *TelnetConn) IsClosed() bool {
 	c.closedMutex.Lock()
 	defer c.closedMutex.Unlock()

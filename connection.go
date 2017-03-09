@@ -145,25 +145,8 @@ func newTelnetConn(opts connOpts) *TelnetConn {
 	return tc
 }
 
-func (c *TelnetConn) connectionLoop() {
-	log.Debugf("Entered connectionLoop")
-	// this is the reading thread
-	// go func() {
-	// 	for {
-	// 		select {
-	// 		case readBytes := <-c.readCh:
-	// 			for _, ch := range readBytes {
-	// 				c.fsmInputCh <- ch
-	// 			}
-
-	// 		case ch := <-c.connReadDoneCh:
-	// 			ch <- struct{}{}
-	// 			return
-	// 		}
-	// 	}
-	// }()
-	// this is the writing thread
-	//go func() {
+func (c *TelnetConn) writeLoop() {
+	log.Debugf("entered write loop")
 	for {
 		select {
 		case writeBytes := <-c.writeCh:
@@ -173,28 +156,7 @@ func (c *TelnetConn) connectionLoop() {
 			return
 		}
 	}
-	//}()
 }
-
-// reads from the connection and dumps into the connection read channel
-// func (c *TelnetConn) readLoop() {
-// 	defer func() {
-// 		log.Debugf("read loop closed")
-// 	}()
-// 	for {
-// 		buf := make([]byte, 4096)
-// 		n, err := c.conn.Read(buf)
-// 		if n > 0 {
-// 			log.Debugf("read %d bytes from the TCP Connection %v", n, buf[:n])
-// 			c.readCh <- buf[:n]
-// 		}
-// 		if err != nil {
-// 			log.Debugf("connection read: %v", err)
-// 			c.Close()
-// 			break
-// 		}
-// 	}
-// }
 
 func (c *TelnetConn) startNegotiation() {
 	c.srvrOptsLock.Lock()
@@ -227,9 +189,7 @@ func (c *TelnetConn) startNegotiation() {
 func (c *TelnetConn) Close() {
 	log.Infof("Closing the connection")
 	c.conn.Close()
-	//c.closeConnLoopRead()
 	c.closeConnLoopWrite()
-	//c.closeFSM()
 	c.closeDatahandler()
 	c.handlerWriter.Close()
 	log.Infof("telnet connection closed")
@@ -238,25 +198,12 @@ func (c *TelnetConn) Close() {
 	c.closed = true
 }
 
-// func (c *TelnetConn) closeConnLoopRead() {
-// 	connLoopReadCh := make(chan struct{})
-// 	c.connReadDoneCh <- connLoopReadCh
-// 	<-connLoopReadCh
-// 	log.Infof("connection loop read-side closed")
-// }
-
 func (c *TelnetConn) closeConnLoopWrite() {
 	connLoopWriteCh := make(chan struct{})
 	c.connWriteDoneCh <- connLoopWriteCh
 	<-connLoopWriteCh
 	log.Infof("connection loop write-side closed")
 }
-
-// func (c *TelnetConn) closeFSM() {
-// 	fsmCh := make(chan struct{})
-// 	c.fsm.doneCh <- fsmCh
-// 	<-fsmCh
-// }
 
 func (c *TelnetConn) closeDatahandler() {
 	dataCh := make(chan struct{})

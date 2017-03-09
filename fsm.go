@@ -16,12 +16,10 @@ const (
 type telnetFSM struct {
 	curState state
 	tc       *TelnetConn
-	doneCh   chan chan struct{}
 }
 
 func newTelnetFSM() *telnetFSM {
 	f := &telnetFSM{
-		doneCh:   make(chan chan struct{}),
 		curState: dataState,
 	}
 	return f

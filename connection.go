@@ -38,7 +38,6 @@ type TelnetConn struct {
 	dataRW        io.ReadWriter
 	cmdBuffer     bytes.Buffer
 	fsm           *telnetFSM
-	fsmInputCh    chan byte
 	handlerWriter io.WriteCloser
 	// cmdHandler is the command handler for the telnet server
 	// it is a callback function when receiving commands issued by the telnet client
@@ -58,8 +57,7 @@ type TelnetConn struct {
 	// callBack function for receiving an option during negotiation
 	optionCallback func(byte, byte)
 
-	// connReadDoneCh and connWriteDoneCh closes the connection loop when the telnet connection is closed
-	connReadDoneCh  chan chan struct{}
+	// connWriteDoneCh closes the write loop when the telnet connection is closed
 	connWriteDoneCh chan chan struct{}
 	// negotiationDone notifies that telnet negotiation has been done
 	negotiationDone chan struct{}
@@ -118,8 +116,6 @@ func newTelnetConn(opts connOpts) *TelnetConn {
 		serverOpts:         opts.serverOpts,
 		clientOpts:         opts.clientOpts,
 		optionCallback:     opts.optCallback,
-		fsmInputCh:         make(chan byte),
-		connReadDoneCh:     make(chan chan struct{}),
 		connWriteDoneCh:    make(chan chan struct{}),
 		negotiationDone:    make(chan struct{}),
 		closed:             false,

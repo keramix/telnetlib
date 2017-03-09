@@ -26,7 +26,9 @@ type TelnetConn struct {
 	conn              net.Conn
 	readCh            chan []byte
 	writeCh           chan []byte
+	srvrOptsLock      sync.Mutex
 	unackedServerOpts map[byte]bool
+	clientOptsLock    sync.Mutex
 	unackedClientOpts map[byte]bool
 	//server            *TelnetServer
 	serverOpts map[byte]bool
@@ -195,16 +197,20 @@ func (c *TelnetConn) connectionLoop() {
 // }
 
 func (c *TelnetConn) startNegotiation() {
+	c.srvrOptsLock.Lock()
 	for k := range c.serverOpts {
 		log.Infof("sending WILL %d", k)
 		c.unackedServerOpts[k] = true
 		c.sendCmd(Will, k)
 	}
+	c.srvrOptsLock.Unlock()
+	c.clientOptsLock.Lock()
 	for k := range c.clientOpts {
 		log.Infof("sending DO %d", k)
 		c.unackedClientOpts[k] = true
 		c.sendCmd(Do, k)
 	}
+	c.clientOptsLock.Unlock()
 	select {
 	case <-c.negotiationDone:
 		log.Infof("Negotiation finished")
@@ -232,12 +238,12 @@ func (c *TelnetConn) Close() {
 	c.closed = true
 }
 
-func (c *TelnetConn) closeConnLoopRead() {
-	connLoopReadCh := make(chan struct{})
-	c.connReadDoneCh <- connLoopReadCh
-	<-connLoopReadCh
-	log.Infof("connection loop read-side closed")
-}
+// func (c *TelnetConn) closeConnLoopRead() {
+// 	connLoopReadCh := make(chan struct{})
+// 	c.connReadDoneCh <- connLoopReadCh
+// 	<-connLoopReadCh
+// 	log.Infof("connection loop read-side closed")
+// }
 
 func (c *TelnetConn) closeConnLoopWrite() {
 	connLoopWriteCh := make(chan struct{})
@@ -246,11 +252,11 @@ func (c *TelnetConn) closeConnLoopWrite() {
 	log.Infof("connection loop write-side closed")
 }
 
-func (c *TelnetConn) closeFSM() {
-	fsmCh := make(chan struct{})
-	c.fsm.doneCh <- fsmCh
-	<-fsmCh
-}
+// func (c *TelnetConn) closeFSM() {
+// 	fsmCh := make(chan struct{})
+// 	c.fsm.doneCh <- fsmCh
+// 	<-fsmCh
+// }
 
 func (c *TelnetConn) closeDatahandler() {
 	dataCh := make(chan struct{})
@@ -265,6 +271,10 @@ func (c *TelnetConn) sendCmd(cmd byte, opt byte) {
 }
 
 func (c *TelnetConn) handleOptionCommand(cmd byte, opt byte) {
+	c.clientOptsLock.Lock()
+	defer c.clientOptsLock.Unlock()
+	c.srvrOptsLock.Lock()
+	defer c.srvrOptsLock.Unlock()
 	if cmd == Will || cmd == Wont {
 		if _, ok := c.clientOpts[opt]; !ok {
 			c.sendCmd(Dont, opt)

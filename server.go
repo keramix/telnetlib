@@ -72,7 +72,7 @@ func (ts *TelnetServer) Accept() (*TelnetConn, error) {
 	}
 	tc := newTelnetConn(opts)
 	go tc.connectionLoop()
-	go tc.readLoop()
+	//go tc.readLoop()
 	go tc.dataHandlerWrapper(tc.handlerWriter, tc.dataRW)
 	go tc.fsm.start()
 	go tc.startNegotiation()

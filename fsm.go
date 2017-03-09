@@ -32,16 +32,26 @@ func (fsm *telnetFSM) start() {
 		log.Infof("FSM closed")
 	}()
 	for {
-		select {
-		case ch := <-fsm.tc.fsmInputCh:
-			//log.Infof("FSM state is %d", fsm.curState)
-			ns := fsm.nextState(ch)
-			fsm.curState = ns
-		case ch := <-fsm.doneCh:
-			ch <- struct{}{}
-			return
+		b := make([]byte, 4096)
+		n, err := fsm.readFromRawConnection(b)
+		if n > 0 {
+			log.Debugf("read %d bytes from the TCP Connection %v", n, b[:n])
+			for i := 0; i < n; i++ {
+				ch := b[i]
+				ns := fsm.nextState(ch)
+				fsm.curState = ns
+			}
+		}
+		if err != nil {
+			log.Debugf("connection read: %v", err)
+			fsm.tc.Close()
+			break
 		}
 	}
+}
+
+func (fsm *telnetFSM) readFromRawConnection(b []byte) (int, error) {
+	return fsm.tc.conn.Read(b)
 }
 
 // this function returns what the next state is and performs the appropriate action

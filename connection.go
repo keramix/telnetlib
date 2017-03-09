@@ -146,53 +146,53 @@ func newTelnetConn(opts connOpts) *TelnetConn {
 func (c *TelnetConn) connectionLoop() {
 	log.Debugf("Entered connectionLoop")
 	// this is the reading thread
-	go func() {
-		for {
-			select {
-			case readBytes := <-c.readCh:
-				for _, ch := range readBytes {
-					c.fsmInputCh <- ch
-				}
+	// go func() {
+	// 	for {
+	// 		select {
+	// 		case readBytes := <-c.readCh:
+	// 			for _, ch := range readBytes {
+	// 				c.fsmInputCh <- ch
+	// 			}
 
-			case ch := <-c.connReadDoneCh:
-				ch <- struct{}{}
-				return
-			}
-		}
-	}()
+	// 		case ch := <-c.connReadDoneCh:
+	// 			ch <- struct{}{}
+	// 			return
+	// 		}
+	// 	}
+	// }()
 	// this is the writing thread
-	go func() {
-		for {
-			select {
-			case writeBytes := <-c.writeCh:
-				c.conn.Write(writeBytes)
-			case ch := <-c.connWriteDoneCh:
-				ch <- struct{}{}
-				return
-			}
+	//go func() {
+	for {
+		select {
+		case writeBytes := <-c.writeCh:
+			c.conn.Write(writeBytes)
+		case ch := <-c.connWriteDoneCh:
+			ch <- struct{}{}
+			return
 		}
-	}()
+	}
+	//}()
 }
 
 // reads from the connection and dumps into the connection read channel
-func (c *TelnetConn) readLoop() {
-	defer func() {
-		log.Debugf("read loop closed")
-	}()
-	for {
-		buf := make([]byte, 4096)
-		n, err := c.conn.Read(buf)
-		if n > 0 {
-			log.Debugf("read %d bytes from the TCP Connection %v", n, buf[:n])
-			c.readCh <- buf[:n]
-		}
-		if err != nil {
-			log.Debugf("connection read: %v", err)
-			c.Close()
-			break
-		}
-	}
-}
+// func (c *TelnetConn) readLoop() {
+// 	defer func() {
+// 		log.Debugf("read loop closed")
+// 	}()
+// 	for {
+// 		buf := make([]byte, 4096)
+// 		n, err := c.conn.Read(buf)
+// 		if n > 0 {
+// 			log.Debugf("read %d bytes from the TCP Connection %v", n, buf[:n])
+// 			c.readCh <- buf[:n]
+// 		}
+// 		if err != nil {
+// 			log.Debugf("connection read: %v", err)
+// 			c.Close()
+// 			break
+// 		}
+// 	}
+// }
 
 func (c *TelnetConn) startNegotiation() {
 	for k := range c.serverOpts {
@@ -221,9 +221,9 @@ func (c *TelnetConn) startNegotiation() {
 func (c *TelnetConn) Close() {
 	log.Infof("Closing the connection")
 	c.conn.Close()
-	c.closeConnLoopRead()
+	//c.closeConnLoopRead()
 	c.closeConnLoopWrite()
-	c.closeFSM()
+	//c.closeFSM()
 	c.closeDatahandler()
 	c.handlerWriter.Close()
 	log.Infof("telnet connection closed")

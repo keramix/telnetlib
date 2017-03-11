@@ -33,7 +33,7 @@ func (fsm *telnetFSM) start() {
 		b := make([]byte, 4096)
 		n, err := fsm.readFromRawConnection(b)
 		if n > 0 {
-			log.Debugf("read %d bytes from the TCP Connection %v", n, b[:n])
+			log.Infof("read %d bytes from the TCP Connection %v", n, b[:n])
 			for i := 0; i < n; i++ {
 				ch := b[i]
 				ns := fsm.nextState(ch)
